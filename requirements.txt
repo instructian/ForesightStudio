@@ -1,0 +1,10 @@
+# Foresight Studio: Core Pipeline Dependencies
+click>=8.0.0
+
+# Optional machine-learning dependencies (supported with fallback logic):
+# To enable semantic vector embeddings clustering:
+# sentence-transformers>=2.2.0
+# numpy>=1.20.0
+
+# To enable automated LLM multi-model assessments and executive synthesis reports:
+# google-generativeai>=0.3.0
