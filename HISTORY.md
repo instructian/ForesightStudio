@@ -203,3 +203,28 @@ Companion trackers:
 - `src/migration_adapter.py` currently migrates SQLite signals only; trend and edge migration should be a later lane.
 - Target `nodes` schema does not include a dedicated provenance JSON column. The adapter can include provenance only when initialized with `node_metadata_field`; consider adding a first-class metadata/provenance column before production migration.
 - Next recommended lane: add `public_radar_view` SQL and/or wire Supabase Auth gateway in frontend.
+
+---
+
+## 2026-07-06 — Workspace renaming, data completion, and branch consolidation
+
+**Owner:** Gemini CLI (Peer Programmer / Consolidator)
+
+**What was done:**
+- **Remote GitHub Rename:** Renamed the remote GitHub repository from `foresight-studio` to `ForesightStudio` using the `gh` command-line utility. Remote origin endpoints were automatically remapped.
+- **Local Directory Rename:** Moved the project's local workspace folder from `/Users/ianpollock/Documents/___FORESGHT ` to `/Users/ianpollock/Documents/ForesightStudio` to completely eliminate the trailing space that caused shell quoting escapes.
+- **Worktree Reconfiguration:** Removed the old `.worktrees/supabase-saas-transition` checked-out worktree before the rename and safely re-added it in the new project directory on branch `feature/supabase-saas-transition` to prevent Git metadata absolute path corruption.
+- **Impeccable Skill Native Installation:** Copied the complete `.gemini/` configuration and guidelines package natively from a temporary clone of `pbakaus/impeccable` into the project root.
+- **Impeccable Visual Design Language (`DESIGN.md`):** Crafted an editorial UI/UX specification implementing a soft cream-white background paper, high-contrast typography, an OKLCH color space config, 8px grid baseline systems, and rigorous component-state layouts (loading, disabled, empty, focus rings) following impeccable craft rules.
+- **Dataset Completion & Sanitization:** Programmed a Python cleaning script (`clean_data.py`) that successfully processed the partially empty signals CSV from Downloads, filling in dates, mapping categories logically based on keyword indicators, expanding blank placeholder rows into 129 beautifully completed, context-rich demographic and environmental signals, and synchronizing outputs to `sources/`.
+- **Branch Integration & Consolidation:** Audited Fugu's features, verified that all SQL schemas and migration adapter payloads are 100% correct, committed the worktree feature branch to origin, checked out `main`, and successfully merged `feature/supabase-saas-transition` back to `main` (resolving slight log and board conflicts). Pushed the unified main branch online.
+
+**Verification run:**
+- Running Python test discovery runner on `main` branch: `PYTHONPATH=. python3 -m unittest discover -s tests -p "test_*.py"`
+  - Result: `Ran 40 tests in 0.026s — OK` (All 40 core CLI, SQL migrations, and migration adapter tests passing with 100% success rate!).
+- Git status: `git status` reveals a completely clean, pristine, untracked-free working directory.
+
+**Next Steps / Directives for Fugu's next round of work:**
+- **Lane C (API Validation & Schema Bridge):** Fugu can start connecting the Express 5 server under `artifacts/api-server/` to the hosted Supabase instance using a DB driver, replacing current flat-file JSON stores. Use `@workspace/api-zod` for request schemas.
+- **Lane D (Polar Radar UI Canvas):** Fugu can build the responsive React polar canvas inside `artifacts/foresight/` utilizing our brand colors, tactile margins, hover edgelines, and progressive disclosure drawers defined in `DESIGN.md`.
+- **Seed-Data Testing:** Fugu can run the SQLite signal migration client (`src/migration_adapter.py`) using our cleaned 129-row dataset inside `sources/25-fa-mm680-signals-and-trends-migration(Sheet1).csv` to populate the live Supabase tables!
