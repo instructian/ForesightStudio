@@ -1,5 +1,6 @@
 # Foresight Studio: Core Pipeline Dependencies
 click>=8.0.0
+supabase>=2.0.0
 
 # Optional machine-learning dependencies (supported with fallback logic):
 # To enable semantic vector embeddings clustering:
