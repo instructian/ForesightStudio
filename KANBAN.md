@@ -10,6 +10,15 @@ This Kanban board tracks the status of all current and future pieces of the Fore
 | [ ] **M3.1: Futures-Wheel Step Wizard** <br> *Form prompt-guiding 1st, 2nd, and 3rd order relational consequences.* | [ ] **M4.1: Public Anonymized view API** <br> *Create `public_radar_view` SQL structure for headless Replit embeds.* | | [x] **M0.4: Radar Coordinate Translators** <br> *Convert STEEP category and horizon terms to visual Polar coordinates.* |
 | [ ] **M3.2: pgvector Related Node Bar** <br> *Instant semantic recommendations overlay using PostgreSQL vector distances.* | | | [x] **M0.5: Command Line CLICK Shell** <br> *Wiring ingestion, reports, and radars into terminal CLI execution commands.* |
 | [ ] **M3.3: Interactive Polar Radar Canvas** <br> *Click-to-expand progressively disclosing nodes on HTML/JS polar grids.* | | | [x] **M0.6: Integration Validation Suite** <br> *15 programmatic tests covering all CLI processes with 100% success rate.* |
+| | | | [x] **M0.7: Project Discovery & Handoff Tracking** <br> *Created `HISTORY.md`; documented repo status, gaps, verification commands, and delegation plan anchor.* |
+
+---
+
+## Handoff Protocol
+
+Every completed implementation or discovery step must be recorded in both:
+1. `HISTORY.md` with date, owner, changes, verification, and next steps.
+2. This `KANBAN.md` with the task moved to its current status and any status notes updated.
 
 ---
 
