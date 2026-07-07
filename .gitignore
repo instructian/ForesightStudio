@@ -51,4 +51,11 @@ Thumbs.db
 
 # Replit
 .cache/
-.local/
+
+# Python and Local Pipeline ignores
+*.db
+.venv/
+__pycache__/
+*.pyc
+.worktrees/
+worktrees/

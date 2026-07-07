@@ -11,10 +11,32 @@ This is a [pnpm](https://pnpm.io/) monorepo. Each artifact lives under `artifact
 | `artifacts/api-server` | Express 5 API, flat-file JSON storage, session auth |
 | `artifacts/foresight` | React + Vite student / instructor web app |
 | `artifacts/mockup-sandbox` | Vite preview sandbox for component variants |
+| `src/` | Core Python Strategic Ingestion, Assessment & Deduplication Pipeline |
+| `tests/` | Pipeline automated unit and end-to-end integration tests |
 
 Shared libraries live under `lib/` and the OpenAPI codegen pipeline is in `scripts/`.
 
-## Quick start
+---
+
+## Foresight Studio Pipeline CLI (Python Core)
+
+We have built a production-grade Python CLI tool implementing the four-stage strategic foresight pipeline:
+
+1. **Multi-Model Assessment:** Evaluates raw signals (Impact, Horizon, Relevance, Actionability) leveraging Gemini API or a local heuristics-driven keyword scanner fallback.
+2. **Semantic Deduplication:** Groups highly overlapping weak signals using SentenceTransformers (with an in-house pure Python TF-IDF cosine similarity engine fallback).
+3. **SQLite Knowledge Graph:** Saves Signal, Shadow, and Trend nodes, fully nesting duplicates behind Keepers to satisfy Design Justice and student attribution.
+4. **Interactive Radar Synthesis:** Computes visual coordinates on polar canvases ($\theta$ STEEP category, $r$ Horizon distance) and compiles strategic reports.
+
+### Run tests:
+```bash
+PYTHONPATH=. python3 -m unittest discover -s tests -p "test_*.py"
+```
+
+Please see the [CLI README](./README.md) for step-by-step CLI usage commands.
+
+---
+
+## Quick start (Web Application)
 
 ```bash
 pnpm install
