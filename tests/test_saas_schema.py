@@ -15,6 +15,7 @@ SHADOW_AFFORDANCES = "20260707100001_shadow_affordances.sql"
 VERIFICATION_STATUS = "20260707100002_verification_status.sql"
 EDGE_MULTIPLICITY = "20260707100003_edge_multiplicity_and_hnsw.sql"
 NODE_EVENTS = "20260707100004_node_events.sql"
+SCENARIO_SCAFFOLDING = "20260707100005_scenario_scaffolding.sql"
 
 
 def read_migration(filename):
@@ -27,7 +28,7 @@ class TestMigrationFilesExist(unittest.TestCase):
         self.assertTrue(os.path.isdir(MIGRATIONS_DIR))
 
     def test_all_migration_files_present(self):
-        for filename in (INIT_SCHEMA, AUTH_TRIGGERS, RLS_POLICIES, SEMANTIC, HARDENING, PROVENANCE_EDGE_INTEGRITY, ASSESSMENT_DIMENSIONS, SHADOW_AFFORDANCES, VERIFICATION_STATUS, EDGE_MULTIPLICITY, NODE_EVENTS):
+        for filename in (INIT_SCHEMA, AUTH_TRIGGERS, RLS_POLICIES, SEMANTIC, HARDENING, PROVENANCE_EDGE_INTEGRITY, ASSESSMENT_DIMENSIONS, SHADOW_AFFORDANCES, VERIFICATION_STATUS, EDGE_MULTIPLICITY, NODE_EVENTS, SCENARIO_SCAFFOLDING):
             path = os.path.join(MIGRATIONS_DIR, filename)
             self.assertTrue(os.path.isfile(path), f"Missing migration: {filename}")
             self.assertGreater(os.path.getsize(path), 0, f"Empty migration: {filename}")
@@ -279,6 +280,30 @@ class TestNodeEvents(unittest.TestCase):
     def test_logging_trigger(self):
         self.assertIn("FUNCTION public.log_node_event()", self.sql)
         self.assertIn("AFTER INSERT OR UPDATE ON nodes", self.sql)
+
+
+class TestScenarioScaffolding(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.sql = read_migration(SCENARIO_SCAFFOLDING)
+
+    def test_enums(self):
+        self.assertIn("CREATE TYPE scenario_quadrant AS ENUM ('High-High', 'High-Low', 'Low-High', 'Low-Low')", self.sql)
+        self.assertIn("CREATE TYPE scenario_node_role AS ENUM ('Driver', 'Evidence', 'Wildcard', 'Shadow-Risk', 'Implication')", self.sql)
+
+    def test_tables(self):
+        for table in ("scenario_sets", "scenarios", "scenario_nodes"):
+            self.assertIn(f"CREATE TABLE IF NOT EXISTS {table}", self.sql)
+
+    def test_axis_references(self):
+        self.assertIn("axis_x_node_id UUID REFERENCES nodes(id)", self.sql)
+        self.assertIn("axis_y_node_id UUID REFERENCES nodes(id)", self.sql)
+
+    def test_quadrant_unique_per_set(self):
+        self.assertIn("UNIQUE (scenario_set_id, quadrant)", self.sql)
+
+    def test_scenario_nodes_pk(self):
+        self.assertIn("PRIMARY KEY (scenario_id, node_id, role)", self.sql)
 
 
 if __name__ == "__main__":
