@@ -13,6 +13,7 @@ PROVENANCE_EDGE_INTEGRITY = "20260706000005_provenance_and_edge_integrity.sql"
 ASSESSMENT_DIMENSIONS = "20260707100000_assessment_dimensions.sql"
 SHADOW_AFFORDANCES = "20260707100001_shadow_affordances.sql"
 VERIFICATION_STATUS = "20260707100002_verification_status.sql"
+EDGE_MULTIPLICITY = "20260707100003_edge_multiplicity_and_hnsw.sql"
 
 
 def read_migration(filename):
@@ -25,7 +26,7 @@ class TestMigrationFilesExist(unittest.TestCase):
         self.assertTrue(os.path.isdir(MIGRATIONS_DIR))
 
     def test_all_migration_files_present(self):
-        for filename in (INIT_SCHEMA, AUTH_TRIGGERS, RLS_POLICIES, SEMANTIC, HARDENING, PROVENANCE_EDGE_INTEGRITY, ASSESSMENT_DIMENSIONS, SHADOW_AFFORDANCES, VERIFICATION_STATUS):
+        for filename in (INIT_SCHEMA, AUTH_TRIGGERS, RLS_POLICIES, SEMANTIC, HARDENING, PROVENANCE_EDGE_INTEGRITY, ASSESSMENT_DIMENSIONS, SHADOW_AFFORDANCES, VERIFICATION_STATUS, EDGE_MULTIPLICITY):
             path = os.path.join(MIGRATIONS_DIR, filename)
             self.assertTrue(os.path.isfile(path), f"Missing migration: {filename}")
             self.assertGreater(os.path.getsize(path), 0, f"Empty migration: {filename}")
@@ -243,6 +244,20 @@ class TestVerificationStatus(unittest.TestCase):
 
     def test_guard_protects_verification(self):
         self.assertIn("NEW.verification IS DISTINCT FROM OLD.verification", self.sql)
+
+
+class TestEdgeMultiplicityAndHnsw(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.sql = read_migration(EDGE_MULTIPLICITY)
+
+    def test_pk_includes_relationship_type(self):
+        self.assertIn("DROP CONSTRAINT IF EXISTS edges_pkey", self.sql)
+        self.assertIn("PRIMARY KEY (source_node_id, target_node_id, relationship_type)", self.sql)
+
+    def test_hnsw_replaces_ivfflat(self):
+        self.assertIn("DROP INDEX IF EXISTS nodes_embedding_idx", self.sql)
+        self.assertIn("USING hnsw (embedding vector_cosine_ops)", self.sql)
 
 
 if __name__ == "__main__":
