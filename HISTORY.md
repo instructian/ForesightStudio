@@ -271,6 +271,86 @@ Companion trackers:
 
 ---
 
+## 2026-07-08 — M2.1b Path A live RLS test planning and local blocker
+
+**Owner:** fugu orchestrator
+
+**Goal:**
+- Execute M2.1b using Path A: real local Supabase stack via Supabase CLI + Docker.
+- Delegate setup/test implementation to low-cost subagents where possible, while reserving fugu for security review and final acceptance.
+
+**Path A plan:**
+1. Ensure Docker daemon is running.
+2. Install Supabase CLI if absent.
+3. Initialize Supabase project config if `supabase/config.toml` is absent.
+4. Run `supabase start`.
+5. Run `supabase db reset` to apply all migrations in order.
+6. Seed users/terms/profiles for:
+   - Administrator
+   - approved Student A
+   - approved Student B in a different term
+   - Subscriber
+   - unapproved Student
+7. Execute live RLS assertions:
+   - Student cannot update own `role`, `is_approved`, or `term_id`.
+   - Student cannot insert verified `Signal`/`Trend` nodes.
+   - Student cannot update verification/attribution fields (`is_keeper`, `keeper_id`, `convergence_score`, `created_by`, `term_id`).
+   - Subscriber can read verified keeper Signals only.
+   - `surface_related_nodes()` respects caller RLS.
+   - Cross-term edges are rejected by `guard_edge_term_consistency()`.
+   - Student cross-term reads are blocked where policy requires isolation.
+8. Record exact pass/fail output in `HISTORY.md`; update `KANBAN.md` from blocked/in-progress to done if verified.
+
+**Local execution attempt:**
+- Checked Docker daemon: `docker info` failed → Docker is not running.
+- Checked local tools: `supabase` not installed; `psql` not installed; `brew` and `npx` are available.
+- Attempted to launch Docker Desktop with `open -a Docker`.
+  - Result: Docker Desktop app not found.
+- Waited for Docker daemon for ~90 seconds.
+  - Result: daemon still unavailable.
+
+**Follow-up execution after tool install:**
+- Installed Supabase CLI via Homebrew: `supabase --version` → `2.109.1`.
+- Started OrbStack so Docker became available: `docker info` passed.
+- Ran `supabase init`, creating local Supabase config.
+- Ran `supabase start`; all migrations applied successfully to local Supabase/Postgres.
+- Added `tests/sql/live_rls_assertions.sql`, a live Postgres RLS harness using authenticated-role JWT claim simulation.
+- First live RLS run exposed a real schema gap: RLS policies existed, but `authenticated` lacked table privileges, so API users could not reach policies.
+- Added `supabase/migrations/20260707100007_authenticated_table_grants.sql` to grant authenticated users table/function privileges while retaining RLS as the authorization boundary.
+- Ran `supabase db reset` to reapply all migrations including the grants migration.
+
+**Live verification run:**
+- Command: `docker exec -i supabase_db_ForesightStudio psql -U postgres -d postgres -v ON_ERROR_STOP=1 < tests/sql/live_rls_assertions.sql`
+- Result: `M2.1b live RLS assertions passed`
+
+**Assertions covered:**
+- Student cannot update own `role`, `is_approved`, or `term_id`.
+- Student cannot insert pre-verified nodes.
+- Student cannot promote self-authored nodes via `is_keeper` or `convergence_score`.
+- Student can insert an allowed own-term raw draft.
+- Student A cannot read Term B draft content.
+- Subscriber can read verified keeper Signals only, not raw/shadow/draft nodes.
+- `surface_related_nodes()` respects subscriber RLS visibility.
+- Cross-term edge insert is rejected.
+- Unapproved student cannot read nodes.
+
+**Static verification after live-test additions:**
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -m unittest tests/test_saas_schema.py`
+  - Result: `Ran 61 tests in 0.003s — OK`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -m unittest discover -s tests -p "test_*.py"`
+  - Result: `Ran 93 tests in 0.052s — OK`
+
+**Current status:**
+- M2.1b is complete by Path A live Supabase verification.
+- Supabase local stack is running under OrbStack/Docker.
+
+**Remaining follow-ups:**
+- Decide whether to keep `supabase/config.toml` committed as project-local dev config.
+- Consider adding a convenience script for running `tests/sql/live_rls_assertions.sql`.
+- Continue with M1.4 Migration Adapter Integrity or M4.1 Public Anonymized Radar View.
+
+---
+
 ## 2026-07-06 — Workspace renaming, data completion, and branch consolidation
 
 **Owner:** Gemini CLI (Peer Programmer / Consolidator)

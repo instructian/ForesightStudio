@@ -60,3 +60,4 @@ __pycache__/
 .pytest_cache/
 .worktrees/
 worktrees/
+.claude/settings.local.json

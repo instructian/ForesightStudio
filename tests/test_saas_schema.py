@@ -17,6 +17,7 @@ EDGE_MULTIPLICITY = "20260707100003_edge_multiplicity_and_hnsw.sql"
 NODE_EVENTS = "20260707100004_node_events.sql"
 SCENARIO_SCAFFOLDING = "20260707100005_scenario_scaffolding.sql"
 SCENARIO_RLS = "20260707100006_scenario_rls.sql"
+AUTHENTICATED_GRANTS = "20260707100007_authenticated_table_grants.sql"
 
 
 def read_migration(filename):
@@ -29,7 +30,7 @@ class TestMigrationFilesExist(unittest.TestCase):
         self.assertTrue(os.path.isdir(MIGRATIONS_DIR))
 
     def test_all_migration_files_present(self):
-        for filename in (INIT_SCHEMA, AUTH_TRIGGERS, RLS_POLICIES, SEMANTIC, HARDENING, PROVENANCE_EDGE_INTEGRITY, ASSESSMENT_DIMENSIONS, SHADOW_AFFORDANCES, VERIFICATION_STATUS, EDGE_MULTIPLICITY, NODE_EVENTS, SCENARIO_SCAFFOLDING, SCENARIO_RLS):
+        for filename in (INIT_SCHEMA, AUTH_TRIGGERS, RLS_POLICIES, SEMANTIC, HARDENING, PROVENANCE_EDGE_INTEGRITY, ASSESSMENT_DIMENSIONS, SHADOW_AFFORDANCES, VERIFICATION_STATUS, EDGE_MULTIPLICITY, NODE_EVENTS, SCENARIO_SCAFFOLDING, SCENARIO_RLS, AUTHENTICATED_GRANTS):
             path = os.path.join(MIGRATIONS_DIR, filename)
             self.assertTrue(os.path.isfile(path), f"Missing migration: {filename}")
             self.assertGreater(os.path.getsize(path), 0, f"Empty migration: {filename}")
@@ -362,6 +363,22 @@ class TestScenarioRls(unittest.TestCase):
     def test_subscriber_published_only(self):
         self.assertIn("scenario_sets_subscriber_read_published", self.sql)
         self.assertIn("is_published = true", self.sql)
+
+
+class TestAuthenticatedGrants(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.sql = read_migration(AUTHENTICATED_GRANTS)
+
+    def test_schema_usage_granted(self):
+        self.assertIn("GRANT USAGE ON SCHEMA public TO authenticated", self.sql)
+
+    def test_core_tables_granted(self):
+        for table in ("terms", "profiles", "nodes", "edges"):
+            self.assertIn(f"ON {table} TO authenticated", self.sql)
+
+    def test_recommender_execute_granted(self):
+        self.assertIn("GRANT EXECUTE ON FUNCTION surface_related_nodes", self.sql)
 
 
 if __name__ == "__main__":
