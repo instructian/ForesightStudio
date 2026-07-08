@@ -101,6 +101,22 @@ class TestNonDestructiveDedup(unittest.TestCase):
         notes = {m.get("note") for m in keeper["source_metadata"] if "note" in m}
         self.assertIn("original-b" if keeper["id"] == "a" else "original-a", notes)
 
+    def test_repeated_dedup_runs_do_not_grow_provenance(self):
+        base = {"category": "Technological", "time_horizon": "Mid-term"}
+        self.db.add_signal({"id": "a", "title": "Robotic delivery drones expand across cities",
+                            "description": "Drones deliver parcels in cities everywhere.",
+                            "source_metadata": [{"note": "original-a"}], **base})
+        self.db.add_signal({"id": "b", "title": "Robotic delivery drones expand across cities rapidly",
+                            "description": "Drones deliver parcels in cities everywhere now.",
+                            "source_metadata": [{"note": "original-b"}], **base})
+        self.engine.deduplicate_database(self.db)
+        keeper_first = [s for s in self.db.get_all_signals(filter_keeper=True)][0]
+        first_len = len(keeper_first["source_metadata"])
+        self.engine.deduplicate_database(self.db)
+        self.engine.deduplicate_database(self.db)
+        keeper_after = self.db.get_signal(keeper_first["id"])
+        self.assertEqual(len(keeper_after["source_metadata"]), first_len)
+
 
 if __name__ == '__main__':
     unittest.main()

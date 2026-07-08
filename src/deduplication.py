@@ -1,3 +1,4 @@
+import json
 import math
 import re
 import collections
@@ -200,10 +201,39 @@ class DeduplicationEngine:
 
             # Merge, never erase: keeper keeps its own prior provenance plus a
             # snapshot of each duplicate (including the duplicate's provenance).
-            provenance_metadata = list(keeper_sig.get("source_metadata") or [])
+            # This must be idempotent: running dedup again on an already-merged
+            # keeper must not re-append entries that are already present.
+            duplicate_ids = {signals[d_idx]["id"] for d_idx in duplicate_indices}
+
+            provenance_metadata: List[Dict[str, Any]] = []
+            seen_keys = set()
+
+            def _entry_key(entry: Dict[str, Any]) -> Any:
+                # Snapshot dicts are identified by their duplicate id; arbitrary
+                # note-style entries are identified by their content.
+                if isinstance(entry, dict) and "id" in entry:
+                    return ("id", entry["id"])
+                return ("json", json.dumps(entry, sort_keys=True))
+
+            def _add_entry(entry: Dict[str, Any]) -> None:
+                key = _entry_key(entry)
+                if key in seen_keys:
+                    return
+                seen_keys.add(key)
+                provenance_metadata.append(entry)
+
+            # (a) Keeper's own pre-existing entries that did NOT come from a
+            # tracked duplicate in this cluster (i.e. not a snapshot dict for
+            # one of these duplicate ids).
+            for entry in keeper_sig.get("source_metadata") or []:
+                if isinstance(entry, dict) and entry.get("id") in duplicate_ids:
+                    continue
+                _add_entry(entry)
+
             for d_idx in duplicate_indices:
                 d_sig = signals[d_idx]
-                provenance_metadata.append({
+                # (b) One snapshot dict per duplicate.
+                _add_entry({
                     "id": d_sig["id"],
                     "title": d_sig["title"],
                     "description": d_sig["description"],
@@ -211,12 +241,11 @@ class DeduplicationEngine:
                     "date_observed": d_sig.get("date_observed"),
                     "geography": d_sig.get("geography"),
                     "sector": d_sig.get("sector"),
-                    "prior_source_metadata": d_sig.get("source_metadata") or [],
                 })
-                # Flatten the duplicate's own provenance entries directly into the
-                # keeper's list too, so nothing the duplicate carried is discarded
-                # or only reachable via a nested key.
-                provenance_metadata.extend(d_sig.get("source_metadata") or [])
+                # (c) The duplicate's own prior metadata entries, flattened in
+                # and de-duplicated.
+                for entry in d_sig.get("source_metadata") or []:
+                    _add_entry(entry)
 
             # Calculate dynamic convergence score based on duplicate density
             # Convergence = 1.0 + 0.5 * number of duplicates
