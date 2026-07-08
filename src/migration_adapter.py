@@ -88,6 +88,11 @@ class MigrationAdapter:
             return "Signal"
         return "Shadow"
 
+    def _resolve_verification(self, row: Dict[str, Any]) -> str:
+        if int(row.get("is_keeper", 1) or 0) == 1 and row.get("status") == "Signal":
+            return "Verified"
+        return "Raw"
+
     def _parse_provenance(self, row: Dict[str, Any]) -> Any:
         raw = row.get("source_metadata")
         if isinstance(raw, (dict, list)):
@@ -119,6 +124,12 @@ class MigrationAdapter:
             "convergence_score": row.get("convergence_score"),
             "strategic_relevance": row.get("strategic_relevance"),
             "actionability": row.get("actionability"),
+            "uncertainty_score": row.get("uncertainty_score"),
+            "horizon_year": row.get("horizon_year"),
+            "polarity": row.get("polarity") or "Emergent",
+            "shadow_type": row.get("shadow_type"),
+            "mitigation_notes": row.get("mitigation_notes"),
+            "verification": self._resolve_verification(row),
             "is_keeper": int(row.get("is_keeper", 1) or 0) == 1,
             "embedding": self.generate_embedding(text),
             "source_metadata": {

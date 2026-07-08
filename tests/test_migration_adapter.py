@@ -141,5 +141,34 @@ class TestMigrationAdapter(unittest.TestCase):
         self.assertEqual(supabase.tables["nodes"].payloads[1]["node_type"], "Shadow")
 
 
+class TestShadowAndUncertaintyMapping(unittest.TestCase):
+    def setUp(self):
+        self.adapter = MigrationAdapter(sqlite_path=":memory:", supabase_client=object())
+
+    def test_payload_includes_new_dimensions(self):
+        row = {
+            "id": "sig_1", "title": "Mall decline", "description": "d",
+            "category": "Economic", "time_horizon": "Mid-term",
+            "is_keeper": 1, "status": "Signal",
+            "uncertainty_score": 7, "horizon_year": 2033,
+            "polarity": "Shadow", "shadow_type": "Declining-System",
+            "mitigation_notes": "hedge",
+        }
+        payload = self.adapter.build_node_payload(row)
+        self.assertEqual(payload["uncertainty_score"], 7)
+        self.assertEqual(payload["horizon_year"], 2033)
+        self.assertEqual(payload["polarity"], "Shadow")
+        self.assertEqual(payload["shadow_type"], "Declining-System")
+        self.assertEqual(payload["verification"], "Verified")
+
+    def test_raw_row_maps_to_raw_verification(self):
+        row = {"id": "sig_2", "title": "t", "description": "d",
+               "category": "Social", "time_horizon": "Near-term",
+               "is_keeper": 0, "status": "Shadow"}
+        payload = self.adapter.build_node_payload(row)
+        self.assertEqual(payload["verification"], "Raw")
+        self.assertEqual(payload["polarity"], "Emergent")
+
+
 if __name__ == "__main__":
     unittest.main()
