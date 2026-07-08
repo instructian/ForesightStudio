@@ -16,6 +16,7 @@ VERIFICATION_STATUS = "20260707100002_verification_status.sql"
 EDGE_MULTIPLICITY = "20260707100003_edge_multiplicity_and_hnsw.sql"
 NODE_EVENTS = "20260707100004_node_events.sql"
 SCENARIO_SCAFFOLDING = "20260707100005_scenario_scaffolding.sql"
+SCENARIO_RLS = "20260707100006_scenario_rls.sql"
 
 
 def read_migration(filename):
@@ -28,7 +29,7 @@ class TestMigrationFilesExist(unittest.TestCase):
         self.assertTrue(os.path.isdir(MIGRATIONS_DIR))
 
     def test_all_migration_files_present(self):
-        for filename in (INIT_SCHEMA, AUTH_TRIGGERS, RLS_POLICIES, SEMANTIC, HARDENING, PROVENANCE_EDGE_INTEGRITY, ASSESSMENT_DIMENSIONS, SHADOW_AFFORDANCES, VERIFICATION_STATUS, EDGE_MULTIPLICITY, NODE_EVENTS, SCENARIO_SCAFFOLDING):
+        for filename in (INIT_SCHEMA, AUTH_TRIGGERS, RLS_POLICIES, SEMANTIC, HARDENING, PROVENANCE_EDGE_INTEGRITY, ASSESSMENT_DIMENSIONS, SHADOW_AFFORDANCES, VERIFICATION_STATUS, EDGE_MULTIPLICITY, NODE_EVENTS, SCENARIO_SCAFFOLDING, SCENARIO_RLS):
             path = os.path.join(MIGRATIONS_DIR, filename)
             self.assertTrue(os.path.isfile(path), f"Missing migration: {filename}")
             self.assertGreater(os.path.getsize(path), 0, f"Empty migration: {filename}")
@@ -304,6 +305,28 @@ class TestScenarioScaffolding(unittest.TestCase):
 
     def test_scenario_nodes_pk(self):
         self.assertIn("PRIMARY KEY (scenario_id, node_id, role)", self.sql)
+
+
+class TestScenarioRls(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.sql = read_migration(SCENARIO_RLS)
+
+    def test_rls_enabled_all_tables(self):
+        for table in ("scenario_sets", "scenarios", "scenario_nodes"):
+            self.assertIn(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY", self.sql)
+
+    def test_admin_policies(self):
+        for policy in ("scenario_sets_admin_all", "scenarios_admin_all", "scenario_nodes_admin_all"):
+            self.assertIn(policy, self.sql)
+
+    def test_student_term_scoped(self):
+        self.assertIn("scenario_sets_student_term", self.sql)
+        self.assertIn("public.current_user_term_id()", self.sql)
+
+    def test_subscriber_published_only(self):
+        self.assertIn("scenario_sets_subscriber_read_published", self.sql)
+        self.assertIn("is_published = true", self.sql)
 
 
 if __name__ == "__main__":
