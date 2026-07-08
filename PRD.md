@@ -2,7 +2,7 @@
 
 **Date:** July 6, 2026  
 **Status:** Canonical  
-**Version:** 1.0  
+**Version:** 2.0  
 **Primary Audience:** Engineering Team, Instructors/Facilitators, Speculative Designers, Enterprise Partners  
 
 ---
@@ -20,7 +20,7 @@ Foresight Studio solves two distinct but complementary problems:
 2. **The Enterprise Path (Strategic Consultants & Executives):** Modern enterprise strategy is often overwhelmed by information fatigue, redundant signals, and lack of traceability. Foresight Studio utilizes semantic deduplication to synthesize noisy data into clear "Trends," mapping them on a spatial Polar Radar Canvas while preserving raw source provenance as auditable metadata.
 
 ### 1.3 Design Justice Integration
-In accordance with **Design Justice** frameworks, the system is engineered to counter the extraction of marginalized lived experiences. It enforces **Provenance & Attribution Gating**, ensuring that under-reported societal shifts (Shadow Research) are not erased. When signals are merged, original authors and localized standpoints are preserved as active metadata behind the main visual nodes, creating a "designed contact zone" rather than a sterilized consensus.
+In accordance with **Design Justice** frameworks, the system is engineered to counter the extraction of marginalized lived experiences. It enforces **Provenance & Attribution Gating**, ensuring that under-reported societal shifts (Shadow Research) are not erased. When signals are merged, original authors and localized standpoints are preserved as active metadata in a first-class `source_metadata` JSONB column behind the main visual nodes, creating a "designed contact zone" rather than a sterilized consensus.
 
 ---
 
@@ -45,16 +45,15 @@ To solve information overload:
 * **Cosine Similarity Clustering:** Signals with similarity coefficients exceeding a threshold (default: 0.75) are grouped into single clusters.
 * **Medoid Selection ("The Keeper"):** For each cluster, the central "medoid" node—the signal closest to all others in vector space—is selected as the primary visible signal (the "Keeper"). All other signals in the cluster are marked as "Duplicates."
 * **Convergence Score Calculation:** The Keeper gains a dynamic Convergence Score representing the cluster's duplicate density (frequency/corroboration of the trend).
-* **Provenance Retention:** Duplicates are not deleted; they are nested behind the Keeper. The platform preserves the names, source URLs, dates, and localized descriptions of all duplicates.
+* **Provenance Retention:** Duplicates are not deleted; they are nested behind the Keeper in the first-class `source_metadata` JSONB column.
 
-### 2.3 Stage 3: SQLite Knowledge Graph Storage
-The system replaces flat lists with a relational knowledge graph using SQLite, schema-hardened for relational integrity:
+### 2.3 Stage 3: SQLite/PostgreSQL Knowledge Graph Storage
+The system replaces flat lists with a relational knowledge graph using a unified nodes-and-edges schema:
 * **Nodes:**
   * **Signals / Shadows:** Raw observations. Signals are verified; Shadows represent anomalous, un-deduplicated, or marginalized weak signals.
   * **Trends:** Synthesized macro patterns linked to multiple signals.
-  * **Drivers of Change:** Overarching forces of change (STEEP/PESTLE categories).
-  * **Implications:** Risks, opportunities, and strategic questions for audiences.
-* **Edges:** Many-to-many associations (`Signal_Trend_Map`, `Trend_Driver_Map`) mapped with semantic attributes (`relationship_type`, `strength_score`) to ensure strict traceability from high-level scenario down to original raw source articles.
+  * **Consequence Trees:** Spatially structured first, second, and third-order systemic implications derived from futures-wheel data entry.
+* **Edges:** Many-to-many associations (`Cites`, `Consequence`, `Contradicts`, `Aggregates`) mapped with semantic attributes (`relationship_type`, `strength_score`) to ensure strict traceability from high-level scenario down to original raw source articles.
 
 ### 2.4 Stage 4: Interactive Radar & Narrative Synthesis
 Visualizing complex foresight landscapes spatially on a Polar Canvas:
@@ -71,6 +70,14 @@ Visualizing complex foresight landscapes spatially on a Polar Canvas:
   * **Node Size:** Encodes the *Impact Potential* (higher impact = larger dot).
   * **Node Glow/Intensity:** Encodes the *Convergence Score* (more duplicate density = brighter glow).
 * **Executive Report Compiler:** Compiles a final markdown/JSON synthesis combining high-impact, highly convergent trends into board-ready executive summaries.
+
+### 2.5 Multi-Tenant SaaS Security & Privilege Control
+To safeguard academic integrity, prevent tenant leakage, and secure commercial gates:
+*   **Role Sign-up Hardening:** All user registrations default to unapproved `Student` roles. High-level permissions (`Administrator` or `Subscriber`) must be explicitly configured by an admin.
+*   **Profile Protection Triggers:** Non-admin users are blocked at the SQL-trigger level from changing their own `role`, approval state (`is_approved`), or assigned academic quarter (`term_id`).
+*   **Node Self-Verification Blocks:** Triggers prevent non-admins from self-verifying signals/trends, changing keeper structures, or altering calculated convergence scores.
+*   **Edge Same-Term Boundary rules:** Edges are validated at the trigger level to ensure they only connect node endpoints that share the same academic/consulting term.
+*   **Leakage-Free pgvector Recommendations:** The semantic search procedure runs under `SECURITY INVOKER`, ensuring that all related-node recommendations respect active caller RLS policies.
 
 ---
 
@@ -99,14 +106,13 @@ Visualizing complex foresight landscapes spatially on a Polar Canvas:
 
 ---
 
-## 4. Technical Constraints & Out-of-Scope
+## 4. Operational & Engineering Guidelines
 
-### 4.1 Technical Constraints
-* **Runtime:** Python 3.12+ for the core pipeline engine.
-* **Storage:** SQLite 3 database for the relational schema, ensuring zero-configuration deployment and full portfolio portability.
-* **Dependencies:** Optimized for high portability. Dynamic fallbacks are required for ML pipelines: if `sentence-transformers` is absent, the engine must gracefully fall back to optimized TF-IDF and keyword-overlap algorithms. If the `GEMINI_API_KEY` is not present, the assessment engine must execute deterministic heuristic analysis.
+### 4.1 Technology Stack & Alignment
+*   **Local Engine:** Python 3.12, Click CLI, local SQLite sqlite3 core with offline TF-IDF fallback capability.
+*   **Hosted SaaS Platform:** Supabase PostgreSQL 16 (supported with `pgvector`), React, Express 5, and pnpm.
+*   **Type Safety:** OpenAPI, Zod requests validation, and TypeScript 5.
 
-### 4.2 Out-of-Scope (Non-Goals)
-* **SSO/Identity Server:** Simple passcode and secure cookied sessions are sufficient for pedagogical/consulting scopes.
-* **Autonomous Scenario Writer:** The tool must not autonomously invent scenario text; it is an analytical assistant. Final scenario text must remain student-authored and grounded in verifiable signals.
-* **Real-time Collaboration Socket Server:** Traditional polling is sufficient for dashboard refreshes.
+### 4.2 Security Constraints
+*   **Row-Level Security (RLS)** is enabled by default on all hosted tables.
+*   All tests must run safely without requiring live, network-bound third-party secrets.

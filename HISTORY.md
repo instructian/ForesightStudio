@@ -206,6 +206,71 @@ Companion trackers:
 
 ---
 
+## 2026-07-07 — Schema/RLS correctness audit and hardening
+
+**Owner:** fugu architect/reviewer
+
+**What was done:**
+- Audited existing Supabase schema and RLS migrations for correctness, privilege escalation, tenant leakage, and verification-integrity risks.
+- Added one focused hardening migration instead of broad feature work.
+- Strengthened schema tests to lock in the security fixes.
+
+**Files added/changed:**
+- `supabase/migrations/20260706000004_rls_hardening.sql`
+  - Adds `guard_profile_self_update()` to prevent non-admin users from changing their own `role`, `is_approved`, or `term_id`.
+  - Adds `guard_node_write()` to prevent non-admin users from self-verifying nodes or changing attribution/verification fields such as `node_type`, `is_keeper`, `keeper_id`, `convergence_score`, `created_by`, or `term_id`.
+  - Replaces `handle_new_user()` so all signups start as unapproved `Student` profiles, ignoring user-supplied role metadata.
+  - Replaces `surface_related_nodes()` as `SECURITY INVOKER` so pgvector search respects caller RLS instead of bypassing tenant/policy boundaries.
+  - Adds `updated_at` triggers for `profiles` and `nodes`.
+  - Adds `nodes_keeper_id_idx` for keeper/provenance lookups.
+- `tests/test_saas_schema.py`
+  - Added hardening migration existence checks.
+  - Added text-level assertions for profile guard, node guard, signup defaulting, recommender `SECURITY INVOKER`, and `updated_at` triggers.
+
+**Verification run:**
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -m unittest tests/test_saas_schema.py`
+  - Result: `Ran 25 tests in 0.000s — OK`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -m unittest discover -s tests -p "test_*.py"`
+  - Result: `Ran 45 tests in 0.026s — OK`
+
+**Audit findings resolved:**
+- Closed profile self-update privilege escalation.
+- Closed student self-verification of Signals/Trends.
+- Closed self-signup role injection.
+- Closed pgvector recommender RLS bypass.
+
+**Follow-up fixes added after audit:**
+- Added `supabase/migrations/20260706000005_provenance_and_edge_integrity.sql`.
+  - Adds first-class `nodes.source_metadata JSONB DEFAULT '[]'::jsonb NOT NULL` plus a GIN index for provenance/attribution lookup.
+  - Adds `guard_edge_term_consistency()` to prevent edges from connecting nodes across different terms, and to ensure `edges.term_id` matches endpoint node terms.
+- Updated `src/migration_adapter.py` so migrated Supabase node payloads write `source_metadata` by default.
+- Updated `tests/test_saas_schema.py` and `tests/test_migration_adapter.py` to cover provenance and edge-integrity fixes.
+
+**Verification run after follow-up fixes:**
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -m unittest tests/test_saas_schema.py tests/test_migration_adapter.py`
+  - Result: `Ran 33 tests in 0.012s — OK`
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -m unittest discover -s tests -p "test_*.py"`
+  - Result: `Ran 48 tests in 0.026s — OK`
+
+**Remaining schema/RLS decisions for a cheaper implementation agent:**
+- Decide whether verified keeper Signals are intentionally global across terms, or should be term-scoped for privacy.
+- Add live Postgres/Supabase policy tests. Current tests are static SQL assertions only.
+- Apply migrations `00000` through `00005` to local Supabase/Postgres and validate trigger behavior.
+- Add `public_radar_view` with explicit anonymization policy if M4.1 remains next.
+
+**Low-cost agent work packet:**
+1. Spin up local Supabase/Postgres if available and apply migrations `00000` through `00005`.
+2. Create test users for Administrator, approved Student A, approved Student B, Subscriber, and unapproved Student.
+3. Verify with SQL/RPC tests:
+   - Student cannot update own profile `role`, `is_approved`, or `term_id`.
+   - Student cannot insert `node_type='Signal'` or `node_type='Trend'`.
+   - Student cannot update `is_keeper`, `keeper_id`, `convergence_score`, `created_by`, or `term_id`.
+   - Subscriber can read verified keeper Signals only.
+   - `surface_related_nodes()` only returns nodes visible under caller RLS.
+4. Document exact pass/fail evidence in `HISTORY.md` and update `KANBAN.md`.
+
+---
+
 ## 2026-07-06 — Workspace renaming, data completion, and branch consolidation
 
 **Owner:** Gemini CLI (Peer Programmer / Consolidator)

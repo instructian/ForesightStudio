@@ -121,14 +121,15 @@ class MigrationAdapter:
             "actionability": row.get("actionability"),
             "is_keeper": int(row.get("is_keeper", 1) or 0) == 1,
             "embedding": self.generate_embedding(text),
-        }
-
-        if self.node_metadata_field is not None:
-            payload[self.node_metadata_field] = {
+            "source_metadata": {
                 "source_signal_id": row.get("id"),
                 "keeper_id": row.get("keeper_id"),
                 "provenance": self._parse_provenance(row),
-            }
+            },
+        }
+
+        if self.node_metadata_field is not None and self.node_metadata_field != "source_metadata":
+            payload[self.node_metadata_field] = payload["source_metadata"]
 
         return payload
 

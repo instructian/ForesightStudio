@@ -1,3 +1,4 @@
+import datetime
 import math
 import json
 import os
@@ -92,7 +93,6 @@ class SynthesisEngine:
         Uses Gemini if key is present; otherwise compiles via template.
         """
         keepers = db.get_all_signals(filter_keeper=True)
-        trends = db.get_all_signals(filter_keeper=True) # fall back to top keepers if no Trends exist
 
         # Filter top-priority issues
         high_impact = [k for k in keepers if k["impact_score"] >= 7]
@@ -109,8 +109,9 @@ class SynthesisEngine:
 
     def _compile_from_template(self, keepers: List[Dict[str, Any]], high_impact: List[Dict[str, Any]], high_convergent: List[Dict[str, Any]]) -> str:
         md = []
+        today = datetime.date.today()
         md.append("# Foresight Studio: Strategic Synthesis Report")
-        md.append(f"\nGenerated on: July 6, 2026\n")
+        md.append(f"\nGenerated on: {today.strftime('%B')} {today.day}, {today.year}\n")
         md.append("## 1. Executive Summary")
         md.append("This report synthesizes the collective horizon scanning signals captured in the Foresight Studio. We have analyzed, evaluated, and semantically deduplicated raw scanning points to identify active macro vectors of shift.")
 
@@ -173,6 +174,6 @@ class SynthesisEngine:
 
         Format the entire response in clean, beautiful Markdown.
         """
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-2.0-flash")
         response = model.generate_content(prompt)
         return response.text.strip()

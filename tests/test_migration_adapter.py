@@ -107,6 +107,19 @@ class TestMigrationAdapter(unittest.TestCase):
         self.assertEqual(payload["source_metadata"]["source_signal_id"], "sig_keeper")
         self.assertEqual(payload["source_metadata"]["provenance"], [{"source": "field notes", "observer": "researcher"}])
 
+    def test_source_metadata_written_by_default(self):
+        adapter = MigrationAdapter(self.db_path, supabase_client=MockSupabase())
+        row = adapter.read_signal_rows()[0]
+
+        payload = adapter.build_node_payload(row)
+
+        self.assertIn("source_metadata", payload)
+        self.assertEqual(payload["source_metadata"]["source_signal_id"], "sig_keeper")
+        self.assertEqual(
+            payload["source_metadata"]["provenance"],
+            [{"source": "field notes", "observer": "researcher"}],
+        )
+
     def test_shadow_mapping_prefers_is_keeper_over_status(self):
         adapter = MigrationAdapter(self.db_path, supabase_client=MockSupabase())
         row = adapter.read_signal_rows()[1]

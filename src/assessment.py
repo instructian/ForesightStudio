@@ -56,7 +56,7 @@ class AssessmentEngine:
             "actionability": "Concrete next steps..."
         }}
         """
-        model_name = "gemini-1.5-flash"
+        model_name = "gemini-2.0-flash"
         model = genai.GenerativeModel(model_name)
         response = model.generate_content(
             prompt,

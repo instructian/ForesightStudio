@@ -2,8 +2,8 @@
 
 **Date:** July 6, 2026  
 **Status:** Approved  
-**Version:** 1.0  
-**Target Architecture:** Python 3.12, SQLite 3  
+**Version:** 2.0  
+**Target Architecture:** Python 3.12 (Local/CLI), Supabase PostgreSQL 16 (Hosted/SaaS)
 
 ---
 
@@ -15,151 +15,229 @@
 |                                                                                                 |
 |   +---------------------+        +-------------------------+        +-----------------------+   |
 |   |   1. Ingestion CLI  | -----> | 2. Multi-Model Assess   | -----> | 3. Semantic Dedupl.   |   |
-|   |  - JSON file reader |        |  - Gemini API (Model)   |        |  - SentenceTransformer|   |
+|   |  - JSON/CSV reader  |        |  - Gemini API (Model)   |        |  - SentenceTransformer|   |
 |   |  - RSS Feed parser  |        |  - Heuristic (Fallback) |        |  - TF-IDF (Fallback)  |   |
 |   +---------------------+        +-------------------------+        +-----------------------+   |
 |                                                                                 |               |
 |                                                                                 v               |
 |   +---------------------+        +-------------------------+        +-----------------------+   |
-|   |  5. Output / Radar  | <----- |   4. SQLite Graph DB    | <----- |   Medoid Clustering   |   |
-|   |  - Markdown report  |        |  - Relational signals   |        |  - "Keeper" isolation |   |
-|   |  - Polar JSON state |        |  - Source provenance    |        |  - Dup linking        |   |
+|   |  5. Output / Radar  | <----- | 4. Supabase SaaS DB     | <----- |   Medoid Clustering   |   |
+|   |  - Anonymized API   |        |  - Single-table Nodes   |        |  - "Keeper" isolation |   |
+|   |  - Polar JSON state |        |  - pgvector embeddings  |        |  - Dup nesting        |   |
 |   +---------------------+        +-------------------------+        +-----------------------+   |
 +-------------------------------------------------------------------------------------------------+
 ```
 
 ---
 
-## 2. SQLite Knowledge Graph Database Schema
+## 2. Supabase PostgreSQL Schema
 
-We use SQLite 3 for localized, zero-config relational storage. Foreign key constraints are enforced on connection.
+To support multi-tenancy, collaborative grading, and robust security, we use Supabase (PostgreSQL 16) with standard RLS gates and type enums.
 
 ```sql
--- Enforce on connection: PRAGMA foreign_keys = ON;
+-- Enable pgvector for embedding searches
+CREATE EXTENSION IF NOT EXISTS vector;
 
-CREATE TABLE IF NOT EXISTS signals (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
+-- 1. Enum Definitions
+CREATE TYPE user_role AS ENUM ('Administrator', 'Student', 'Subscriber');
+CREATE TYPE node_type AS ENUM ('Signal', 'Shadow', 'Trend', 'Consequence-1', 'Consequence-2', 'Consequence-3');
+CREATE TYPE steep_category AS ENUM ('Social', 'Technological', 'Economic', 'Environmental', 'Political', 'Legal');
+CREATE TYPE horizon_type AS ENUM ('Near-term', 'Mid-term', 'Long-term');
+CREATE TYPE edge_type AS ENUM ('Cites', 'Consequence', 'Contradicts', 'Aggregates');
+
+-- 2. Terms Table
+CREATE TABLE IF NOT EXISTS terms (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
+    invite_code VARCHAR(50) UNIQUE NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 3. Profiles Table (Auth Synced)
+CREATE TABLE IF NOT EXISTS profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    full_name VARCHAR(255) NOT NULL,
+    role user_role DEFAULT 'Student'::user_role NOT NULL,
+    term_id UUID REFERENCES terms(id) ON DELETE SET NULL,
+    is_approved BOOLEAN DEFAULT FALSE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 4. Nodes Table (Unified single-table hierarchy with first-class JSONB provenance metadata)
+CREATE TABLE IF NOT EXISTS nodes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title VARCHAR(255) NOT NULL,
     description TEXT NOT NULL,
-    category TEXT CHECK(category IN ('Social', 'Technological', 'Economic', 'Environmental', 'Political', 'Legal')) NOT NULL,
+    category steep_category NOT NULL,
+    time_horizon horizon_type NOT NULL,
+    node_type node_type DEFAULT 'Shadow'::node_type NOT NULL,
     source_url TEXT,
-    source_type TEXT,
-    date_observed TEXT,
-    geography TEXT,
-    sector TEXT,
-    tags TEXT, -- Comma-separated strings
-    confidence_score INTEGER DEFAULT 5,
-    novelty_score INTEGER DEFAULT 5,
-    impact_score INTEGER DEFAULT 5,
+    source_type VARCHAR(100),
+    date_observed DATE,
+    geography VARCHAR(255),
+    sector VARCHAR(255),
+    tags TEXT[],
+    confidence_score INTEGER DEFAULT 5 CHECK (confidence_score BETWEEN 1 AND 10),
+    novelty_score INTEGER DEFAULT 5 CHECK (novelty_score BETWEEN 1 AND 10),
+    impact_score INTEGER DEFAULT 5 CHECK (impact_score BETWEEN 1 AND 10),
+    convergence_score REAL DEFAULT 1.0,
     strategic_relevance TEXT,
-    time_horizon TEXT CHECK(time_horizon IN ('Near-term', 'Mid-term', 'Long-term')) NOT NULL,
     actionability TEXT,
-    status TEXT CHECK(status IN ('Signal', 'Shadow')) DEFAULT 'Shadow',
-    convergence_score REAL DEFAULT 1.0,
-    is_keeper INTEGER DEFAULT 1, -- 1 for True, 0 for False (duplicate)
-    keeper_id TEXT, -- Pointer to parent keeper signal if this is a duplicate
-    source_metadata TEXT, -- JSON dictionary of original authors/duplicates for provenance
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(keeper_id) REFERENCES signals(id) ON DELETE SET NULL
+    created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    term_id UUID REFERENCES terms(id) ON DELETE SET NULL,
+    is_keeper BOOLEAN DEFAULT TRUE NOT NULL,
+    keeper_id UUID REFERENCES nodes(id) ON DELETE SET NULL,
+    embedding vector(384),
+    source_metadata JSONB DEFAULT '[]'::jsonb NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    CONSTRAINT keeper_not_self CHECK (keeper_id IS NULL OR keeper_id <> id)
 );
 
-CREATE TABLE IF NOT EXISTS trends (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    summary TEXT NOT NULL,
-    category TEXT CHECK(category IN ('Social', 'Technological', 'Economic', 'Environmental', 'Political', 'Legal')) NOT NULL,
-    time_horizon TEXT CHECK(time_horizon IN ('Near-term', 'Mid-term', 'Long-term')) NOT NULL,
-    impact_level TEXT CHECK(impact_level IN ('Low', 'Medium', 'High')) NOT NULL,
-    uncertainty_level TEXT CHECK(uncertainty_level IN ('Low', 'Medium', 'High')) NOT NULL,
-    convergence_score REAL DEFAULT 1.0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS signal_trend_map (
-    signal_id TEXT,
-    trend_id TEXT,
-    relationship_type TEXT CHECK(relationship_type IN ('Evidence', 'Contradiction', 'Precursor', 'Adjacent')) DEFAULT 'Evidence',
-    strength_score INTEGER CHECK(strength_score BETWEEN 1 AND 10) DEFAULT 5,
+-- 5. Edges Table (Knowledge Graph Links)
+CREATE TABLE IF NOT EXISTS edges (
+    source_node_id UUID REFERENCES nodes(id) ON DELETE CASCADE,
+    target_node_id UUID REFERENCES nodes(id) ON DELETE CASCADE,
+    relationship_type edge_type DEFAULT 'Cites'::edge_type NOT NULL,
+    strength_score INTEGER CHECK (strength_score BETWEEN 1 AND 10) DEFAULT 5,
     notes TEXT,
-    PRIMARY KEY (signal_id, trend_id),
-    FOREIGN KEY(signal_id) REFERENCES signals(id) ON DELETE CASCADE,
-    FOREIGN KEY(trend_id) REFERENCES trends(id) ON DELETE CASCADE
+    created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    term_id UUID REFERENCES terms(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    PRIMARY KEY (source_node_id, target_node_id),
+    CONSTRAINT edge_not_self CHECK (source_node_id <> target_node_id)
 );
 ```
 
 ---
 
-## 3. Core Algorithms
+## 3. Row-Level Security (RLS) & Column-Level Guards
 
-### 3.1 Multi-Model Assessment Pipeline (Stage 1)
-Upon signal ingestion, the text is evaluated by the assessment engine:
-1. **Gemini API Execution:** If `GEMINI_API_KEY` is set, a structured prompt is dispatched using the JSON response schema. It requests:
-   - `impact_score` (Integer 1-10)
-   - `time_horizon` ('Near-term', 'Mid-term', 'Long-term')
-   - `strategic_relevance` (Explanation text)
-   - `actionability` (Direct organizational next-step)
-2. **Heuristic Fallback Strategy:** If the Gemini API is inaccessible, the text is scanned against a localized taxonomy dictionary to calculate scores deterministically:
-   - *Time Horizon:* Checked against keyword vectors (e.g. "immediate", "soon", "now" -> Near-term; "decade", "horizon", "2070" -> Long-term).
-   - *Impact Score:* Scored by scanning intensity nouns (e.g. "disrupt", "collapse", "revolutionize" +2; "slight", "minor" -1).
+To protect user environments, prevent client-side privilege escalation, and lock verification integrity, the following triggers and policies are enforced:
 
-### 3.2 Semantic Deduplication & Medoid Clustering (Stage 2)
-The deduplication pipeline runs in a 3-step matrix operation:
+### 3.1 Profile Self-Update Guard
+Non-admin users are strictly blocked from editing their own `role`, `is_approved`, or `term_id` assignments:
+```sql
+CREATE OR REPLACE FUNCTION public.guard_profile_self_update()
+RETURNS trigger AS $$
+BEGIN
+    IF public.is_administrator() THEN
+        RETURN NEW;
+    END IF;
 
-#### Step 1: Embeddings Vectorization
-Text elements (Title + Description) are compiled and mapped to vectors:
-$$\mathbf{v}_i = \text{Embed}(t_i) \in \mathbb{R}^{384}$$
-*Fallback:* If `sentence-transformers` is unavailable, TF-IDF is run on word tokens to generate high-dimensional sparse representations.
+    IF NEW.role IS DISTINCT FROM OLD.role
+       OR NEW.is_approved IS DISTINCT FROM OLD.is_approved
+       OR NEW.term_id IS DISTINCT FROM OLD.term_id THEN
+        RAISE EXCEPTION 'Not authorized to modify role, approval status, or term assignment';
+    END IF;
 
-#### Step 2: Cosine Similarity Matching
-A pair-wise cosine similarity matrix $\mathbf{S}$ is generated for active signals:
-$$S_{i,j} = \frac{\mathbf{v}_i \cdot \mathbf{v}_j}{\|\mathbf{v}_i\| \|\mathbf{v}_j\|}$$
-Signals are grouped into clusters where $S_{i,j} \geq 0.75$.
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
 
-#### Step 3: Central Medoid Selection ("Keeper")
-Within each similarity cluster $C$, the central **Medoid** node is isolated. The medoid is the signal that maximizes average similarity to all other members in the cluster:
-$$k = \arg\max_{i \in C} \frac{1}{|C|} \sum_{j \in C} S_{i,j}$$
-* Signal $k$ is marked as the **Keeper** (`is_keeper = 1`).
-* All other signals $j \in C \setminus \{k\}$ are marked as duplicates (`is_keeper = 0`), and mapped via `keeper_id = k`.
-* The Keeper's **Convergence Score** is calculated based on duplicate frequency:
-$$\text{Convergence Score} = 1.0 + \alpha \cdot (|C| - 1)$$
-where scaling factor $\alpha = 0.5$.
+### 3.2 Node Integrity & Self-Verification Guard
+Students and subscribers cannot self-verify weak signals into `Signal` or `Trend` nodes, nor modify attribution metadata (such as `is_keeper`, `keeper_id`, or `convergence_score`), which are computed exclusively by the deduplication engine and administrators:
+```sql
+CREATE OR REPLACE FUNCTION public.guard_node_write()
+RETURNS trigger AS $$
+BEGIN
+    IF public.is_administrator() THEN
+        RETURN NEW;
+    END IF;
 
-#### Step 4: Metadata Aggregation
-The `source_metadata` column of the Keeper is updated with a JSON list representing the full attribution history of the duplicates (author, original URL, observation date). This ensures zero information loss and satisfies Design Justice requirements.
+    IF TG_OP = 'INSERT' THEN
+        IF NEW.node_type IN ('Signal', 'Trend') THEN
+            RAISE EXCEPTION 'Not authorized to create verified % nodes', NEW.node_type;
+        END IF;
+        RETURN NEW;
+    END IF;
 
-### 3.3 Polar Radar Geometry Conversion (Stage 4)
-Radar parameters translate high-dimensional signals into visual coordinates on a polar polar chart:
+    IF NEW.node_type IS DISTINCT FROM OLD.node_type
+       OR NEW.is_keeper IS DISTINCT FROM OLD.is_keeper
+       OR NEW.convergence_score IS DISTINCT FROM OLD.convergence_score
+       OR NEW.keeper_id IS DISTINCT FROM OLD.keeper_id
+       OR NEW.created_by IS DISTINCT FROM OLD.created_by
+       OR NEW.term_id IS DISTINCT FROM OLD.term_id THEN
+        RAISE EXCEPTION 'Not authorized to modify verification or attribution fields';
+    END IF;
 
-* **Category Angle Mapping ($\theta$):**
-  $$\theta(\text{Social}) = 30^\circ, \quad \theta(\text{Technological}) = 90^\circ, \quad \theta(\text{Economic}) = 150^\circ$$
-  $$\theta(\text{Environmental}) = 210^\circ, \quad \theta(\text{Political}) = 270^\circ, \quad \theta(\text{Legal}) = 330^\circ$$
-* **Radius Mapping ($r$):**
-  $$r(\text{Near-term}) = 1.0, \quad r(\text{Mid-term}) = 2.0, \quad r(\text{Long-term}) = 3.0$$
-* **Visual Node Representation:**
-  - **Dot Diameter ($D$):** Linearly mapped to the `impact_score` (1-10 range):
-    $$D = d_{\min} + \beta \cdot \text{impact\_score}$$
-  - **Glow Intensity ($G$):** Logarithmically scaled with the `convergence_score`:
-    $$G = \log(1.0 + \text{convergence\_score})$$
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+
+### 3.3 Same-Term Edge Consistency Guard
+Edges cannot connect nodes across different academic terms, and an edge's own `term_id` (when set) must match the endpoint nodes' terms:
+```sql
+CREATE OR REPLACE FUNCTION public.guard_edge_term_consistency()
+RETURNS trigger AS $$
+DECLARE
+    source_term UUID;
+    target_term UUID;
+BEGIN
+    SELECT term_id INTO source_term FROM public.nodes WHERE id = NEW.source_node_id;
+    SELECT term_id INTO target_term FROM public.nodes WHERE id = NEW.target_node_id;
+
+    IF source_term IS DISTINCT FROM target_term THEN
+        RAISE EXCEPTION 'Edge endpoints must belong to the same term';
+    END IF;
+
+    IF NEW.term_id IS NOT NULL AND NEW.term_id IS DISTINCT FROM source_term THEN
+        RAISE EXCEPTION 'Edge term_id must match its endpoint nodes'' term';
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
 
 ---
 
-## 4. CLI Spec & Interface Designs
+## 4. Algorithmic Functions
 
-The tool is accessible via the executable python shell:
-
-```bash
-# Initialize DB
-python3 src/cli.py init-db
-
-# Ingest signals
-python3 src/cli.py ingest <path_to_json_or_csv>
-
-# Deduplicate DB entries
-python3 src/cli.py deduplicate --threshold 0.75
-
-# Output spatial polar coordinate layout of the graph
-python3 src/cli.py radar --format json
-
-# Write synthesized report of high-convergence strategic issues
-python3 src/cli.py report --output report.md
+### 4.1 Obsidian-Style Related Nodes Query
+Surfaces semantically similar nodes inside the database instantly using `pgvector` cosine distance `<=>`. It runs as a `SECURITY INVOKER` function to ensure results are restricted by the caller's active RLS boundaries, preventing tenant leakage:
+```sql
+CREATE OR REPLACE FUNCTION surface_related_nodes(
+    target_embedding vector(384),
+    match_threshold float,
+    match_count int
+)
+RETURNS TABLE (
+    id UUID,
+    title VARCHAR,
+    category steep_category,
+    node_type node_type,
+    similarity float
+)
+LANGUAGE plpgsql
+SECURITY INVOKER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        nodes.id,
+        nodes.title,
+        nodes.category,
+        nodes.node_type,
+        (1.0 - (nodes.embedding <=> target_embedding))::float AS similarity
+    FROM nodes
+    WHERE nodes.embedding IS NOT NULL
+      AND (1.0 - (nodes.embedding <=> target_embedding)) > match_threshold
+    ORDER BY nodes.embedding <=> target_embedding ASC
+    LIMIT match_count;
+END;
+$$;
 ```
+
+### 4.2 Deduplication Medoid Clustering Formulation
+Within each similarity cluster $C$ derived from dense embeddings or fallback TF-IDF overlap matrix values:
+$$k = \arg\max_{i \in C} \frac{1}{|C|} \sum_{j \in C} S_{i,j}$$
+*   The isolated medoid is elevated to `node_type = 'Signal'` (`is_keeper = true`).
+*   Duplicate observations remain as `node_type = 'Shadow'` with `keeper_id` remapped to the medoid.
+*   The Keeper's convergence score scales logarithmically for rendering:
+    $$G = \log(1.0 + (1.0 + \alpha \cdot (|C| - 1)))$$
+*   Provenance histories are packed natively into the Keeper node's first-class JSONB `source_metadata` column to enforce Design Justice.
