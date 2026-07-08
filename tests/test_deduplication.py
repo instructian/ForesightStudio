@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import MagicMock
 from src.deduplication import FallbackTFIDF, DeduplicationEngine
+from src.database import Database
 
 class TestDeduplication(unittest.TestCase):
     def test_fallback_tfidf_similarity(self):
@@ -64,6 +65,42 @@ class TestDeduplication(unittest.TestCase):
         # Verify database calls
         # There should be exactly 3 updates
         self.assertEqual(mock_db.update_signal_deduplication_status.call_count, 3)
+
+class TestNonDestructiveDedup(unittest.TestCase):
+    def setUp(self):
+        self.db = Database(":memory:")
+        self.engine = DeduplicationEngine(threshold=0.75)
+
+    def tearDown(self):
+        self.db.close()
+
+    def test_singleton_is_not_elevated(self):
+        self.db.add_signal({
+            "id": "solo", "title": "Unique lone observation about kelp",
+            "description": "Nothing else is similar to this at all.",
+            "category": "Environmental", "time_horizon": "Near-term",
+        })
+        self.engine.deduplicate_database(self.db)
+        sig = self.db.get_signal("solo")
+        self.assertEqual(sig["status"], "Shadow")
+        self.assertTrue(sig["is_keeper"])
+
+    def test_duplicate_provenance_is_merged_not_erased(self):
+        base = {"category": "Technological", "time_horizon": "Mid-term"}
+        self.db.add_signal({"id": "a", "title": "Robotic delivery drones expand across cities",
+                            "description": "Drones deliver parcels to homes in urban areas today.",
+                            "source_metadata": [{"note": "original-a"}], **base})
+        self.db.add_signal({"id": "b", "title": "Robotic delivery drones expand across cities rapidly",
+                            "description": "Drones deliver parcels to homes in urban areas today and beyond.",
+                            "source_metadata": [{"note": "original-b"}], **base})
+        self.engine.deduplicate_database(self.db)
+        keepers = self.db.get_all_signals(filter_keeper=True)
+        self.assertEqual(len(keepers), 1)
+        keeper = keepers[0]
+        self.assertEqual(keeper["status"], "Signal")
+        notes = {m.get("note") for m in keeper["source_metadata"] if "note" in m}
+        self.assertIn("original-b" if keeper["id"] == "a" else "original-a", notes)
+
 
 if __name__ == '__main__':
     unittest.main()

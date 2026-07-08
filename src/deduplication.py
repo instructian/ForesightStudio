@@ -167,7 +167,9 @@ class DeduplicationEngine:
 
         for cluster in clusters:
             if len(cluster) == 1:
-                # No duplicates, this is already a keeper signal
+                # Singleton: keeper of itself, but an uncorroborated observation
+                # is NOT verified — it stays a Shadow-status research point, and
+                # its existing provenance is preserved untouched.
                 idx = cluster[0]
                 sig = signals[idx]
                 db.update_signal_deduplication_status(
@@ -175,8 +177,8 @@ class DeduplicationEngine:
                     is_keeper=True,
                     keeper_id=None,
                     convergence_score=1.0,
-                    status="Signal", # Elevate standalone to Signal status
-                    source_metadata=[]
+                    status=sig.get("status") or "Shadow",
+                    source_metadata=sig.get("source_metadata") or []
                 )
                 keepers_count += 1
                 continue
@@ -196,8 +198,9 @@ class DeduplicationEngine:
             keeper_sig = signals[medoid_idx]
             duplicate_indices = [idx for idx in cluster if idx != medoid_idx]
 
-            # Aggregate metadata (provenance) of all duplicates for Design Justice
-            provenance_metadata = []
+            # Merge, never erase: keeper keeps its own prior provenance plus a
+            # snapshot of each duplicate (including the duplicate's provenance).
+            provenance_metadata = list(keeper_sig.get("source_metadata") or [])
             for d_idx in duplicate_indices:
                 d_sig = signals[d_idx]
                 provenance_metadata.append({
@@ -207,8 +210,13 @@ class DeduplicationEngine:
                     "source_url": d_sig.get("source_url"),
                     "date_observed": d_sig.get("date_observed"),
                     "geography": d_sig.get("geography"),
-                    "sector": d_sig.get("sector")
+                    "sector": d_sig.get("sector"),
+                    "prior_source_metadata": d_sig.get("source_metadata") or [],
                 })
+                # Flatten the duplicate's own provenance entries directly into the
+                # keeper's list too, so nothing the duplicate carried is discarded
+                # or only reachable via a nested key.
+                provenance_metadata.extend(d_sig.get("source_metadata") or [])
 
             # Calculate dynamic convergence score based on duplicate density
             # Convergence = 1.0 + 0.5 * number of duplicates
@@ -234,7 +242,7 @@ class DeduplicationEngine:
                     keeper_id=keeper_sig["id"],
                     convergence_score=1.0,
                     status="Shadow", # Remain as supporting Shadow research data
-                    source_metadata=[]
+                    source_metadata=d_sig.get("source_metadata") or []
                 )
                 duplicates_count += 1
 
