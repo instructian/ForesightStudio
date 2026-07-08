@@ -14,6 +14,7 @@ ASSESSMENT_DIMENSIONS = "20260707100000_assessment_dimensions.sql"
 SHADOW_AFFORDANCES = "20260707100001_shadow_affordances.sql"
 VERIFICATION_STATUS = "20260707100002_verification_status.sql"
 EDGE_MULTIPLICITY = "20260707100003_edge_multiplicity_and_hnsw.sql"
+NODE_EVENTS = "20260707100004_node_events.sql"
 
 
 def read_migration(filename):
@@ -26,7 +27,7 @@ class TestMigrationFilesExist(unittest.TestCase):
         self.assertTrue(os.path.isdir(MIGRATIONS_DIR))
 
     def test_all_migration_files_present(self):
-        for filename in (INIT_SCHEMA, AUTH_TRIGGERS, RLS_POLICIES, SEMANTIC, HARDENING, PROVENANCE_EDGE_INTEGRITY, ASSESSMENT_DIMENSIONS, SHADOW_AFFORDANCES, VERIFICATION_STATUS, EDGE_MULTIPLICITY):
+        for filename in (INIT_SCHEMA, AUTH_TRIGGERS, RLS_POLICIES, SEMANTIC, HARDENING, PROVENANCE_EDGE_INTEGRITY, ASSESSMENT_DIMENSIONS, SHADOW_AFFORDANCES, VERIFICATION_STATUS, EDGE_MULTIPLICITY, NODE_EVENTS):
             path = os.path.join(MIGRATIONS_DIR, filename)
             self.assertTrue(os.path.isfile(path), f"Missing migration: {filename}")
             self.assertGreater(os.path.getsize(path), 0, f"Empty migration: {filename}")
@@ -258,6 +259,26 @@ class TestEdgeMultiplicityAndHnsw(unittest.TestCase):
     def test_hnsw_replaces_ivfflat(self):
         self.assertIn("DROP INDEX IF EXISTS nodes_embedding_idx", self.sql)
         self.assertIn("USING hnsw (embedding vector_cosine_ops)", self.sql)
+
+
+class TestNodeEvents(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.sql = read_migration(NODE_EVENTS)
+
+    def test_table_created(self):
+        self.assertIn("CREATE TABLE IF NOT EXISTS node_events", self.sql)
+        self.assertIn("payload JSONB", self.sql)
+
+    def test_rls_enabled_read_only(self):
+        self.assertIn("ALTER TABLE node_events ENABLE ROW LEVEL SECURITY", self.sql)
+        self.assertNotIn("FOR INSERT", self.sql)
+        self.assertNotIn("FOR UPDATE", self.sql)
+        self.assertNotIn("FOR DELETE", self.sql)
+
+    def test_logging_trigger(self):
+        self.assertIn("FUNCTION public.log_node_event()", self.sql)
+        self.assertIn("AFTER INSERT OR UPDATE ON nodes", self.sql)
 
 
 if __name__ == "__main__":
