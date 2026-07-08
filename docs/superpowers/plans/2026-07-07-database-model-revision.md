@@ -36,7 +36,7 @@ The current schema overloads `node_type = 'Shadow'` to mean "raw, unverified, or
 **Interfaces:**
 - Produces: `nodes.uncertainty_score` (INTEGER NULL, CHECK 1–10), `nodes.horizon_year` (INTEGER NULL, CHECK 2020–2200), `nodes.assessed_at` (TIMESTAMPTZ NULL), `nodes.assessed_by` (VARCHAR(100) NULL — model name or 'human:<uuid>'). Tasks 8–10 and the Scenario Builder plan depend on `uncertainty_score` and `horizon_year` by these exact names.
 
-- [ ] **Step 1: Write the failing test.** Append to `tests/test_saas_schema.py` (add constant near the other filename constants):
+- [x] **Step 1: Write the failing test.** Append to `tests/test_saas_schema.py` (add constant near the other filename constants):
 
 ```python
 ASSESSMENT_DIMENSIONS = "20260707100000_assessment_dimensions.sql"
@@ -65,9 +65,9 @@ class TestAssessmentDimensions(unittest.TestCase):
 
 Also add `ASSESSMENT_DIMENSIONS` to the tuple in `test_all_migration_files_present`.
 
-- [ ] **Step 2: Run to verify it fails.** `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -m unittest tests.test_saas_schema -v` — expect FAIL (missing migration file).
+- [x] **Step 2: Run to verify it fails.** `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -m unittest tests.test_saas_schema -v` — expect FAIL (missing migration file).
 
-- [ ] **Step 3: Write the migration** `supabase/migrations/20260707100000_assessment_dimensions.sql`:
+- [x] **Step 3: Write the migration** `supabase/migrations/20260707100000_assessment_dimensions.sql`:
 
 ```sql
 -- Scenario planning needs impact x uncertainty; the schema previously had no
@@ -91,9 +91,9 @@ ALTER TABLE nodes ADD COLUMN IF NOT EXISTS assessed_at TIMESTAMP WITH TIME ZONE;
 ALTER TABLE nodes ADD COLUMN IF NOT EXISTS assessed_by VARCHAR(100);
 ```
 
-- [ ] **Step 4: Run tests to verify pass.** Same command as Step 2 → all pass; then run the full suite.
+- [x] **Step 4: Run tests to verify pass.** Same command as Step 2 → all pass; then run the full suite.
 
-- [ ] **Step 5: Commit.** `git add supabase/migrations/20260707100000_assessment_dimensions.sql tests/test_saas_schema.py && git commit -m "feat(db): add uncertainty, horizon_year, and assessment provenance to nodes"`
+- [x] **Step 5: Commit.** `git add supabase/migrations/20260707100000_assessment_dimensions.sql tests/test_saas_schema.py && git commit -m "feat(db): add uncertainty, horizon_year, and assessment provenance to nodes"`
 
 ---
 
@@ -106,7 +106,7 @@ ALTER TABLE nodes ADD COLUMN IF NOT EXISTS assessed_by VARCHAR(100);
 **Interfaces:**
 - Produces: `nodes.polarity` (`signal_polarity` enum `'Emergent'|'Shadow'`, NOT NULL DEFAULT `'Emergent'`), `nodes.shadow_type` (`shadow_type` enum `'Declining-System'|'Obsolete-Behavior'|'Worst-Case-Future'|'Disruption'`, NULL), `nodes.mitigation_notes` (TEXT NULL). Constraint `shadow_fields_require_shadow_polarity` guarantees shadow-only fields are NULL on Emergent nodes. The Scenario Builder's Shadow Risk Register queries `polarity = 'Shadow'`.
 
-- [ ] **Step 1: Write the failing test.** Append to `tests/test_saas_schema.py`:
+- [x] **Step 1: Write the failing test.** Append to `tests/test_saas_schema.py`:
 
 ```python
 SHADOW_AFFORDANCES = "20260707100001_shadow_affordances.sql"
@@ -140,9 +140,9 @@ class TestShadowAffordances(unittest.TestCase):
 
 Add `SHADOW_AFFORDANCES` to `test_all_migration_files_present`.
 
-- [ ] **Step 2: Run to verify FAIL** (missing file).
+- [x] **Step 2: Run to verify FAIL** (missing file).
 
-- [ ] **Step 3: Write the migration** `supabase/migrations/20260707100001_shadow_affordances.sql`:
+- [x] **Step 3: Write the migration** `supabase/migrations/20260707100001_shadow_affordances.sql`:
 
 ```sql
 -- Shadows are weak signals of declining systems, obsolete behaviors, and
@@ -176,9 +176,9 @@ CREATE INDEX IF NOT EXISTS nodes_shadow_polarity_idx ON nodes(polarity)
     WHERE polarity = 'Shadow';
 ```
 
-- [ ] **Step 4: Run tests → pass; run full suite.**
+- [x] **Step 4: Run tests → pass; run full suite.**
 
-- [ ] **Step 5: Commit.** `git commit -m "feat(db): first-class Shadow polarity, shadow_type, and mitigation affordances"`
+- [x] **Step 5: Commit.** `git commit -m "feat(db): first-class Shadow polarity, shadow_type, and mitigation affordances"`
 
 ---
 
@@ -192,7 +192,7 @@ CREATE INDEX IF NOT EXISTS nodes_shadow_polarity_idx ON nodes(polarity)
 - Produces: `nodes.verification` (`verification_status` enum `'Raw'|'Verified'|'Archived'`, NOT NULL DEFAULT `'Raw'`). Recreated RLS policies gate subscriber/student reads on `verification = 'Verified'` instead of `node_type = 'Signal'`. Student UPDATE policy now excludes Verified nodes (closes the "author edits verified content" hole). `public.guard_node_write()` additionally protects `verification` and `assessed_at`/`assessed_by`.
 - Consumes: `polarity` from Task 2 (backfill maps old `node_type='Shadow'` rows).
 
-- [ ] **Step 1: Write the failing test.** Append to `tests/test_saas_schema.py`:
+- [x] **Step 1: Write the failing test.** Append to `tests/test_saas_schema.py`:
 
 ```python
 VERIFICATION_STATUS = "20260707100002_verification_status.sql"
@@ -228,9 +228,9 @@ class TestVerificationStatus(unittest.TestCase):
 
 Add `VERIFICATION_STATUS` to `test_all_migration_files_present`.
 
-- [ ] **Step 2: Run to verify FAIL.**
+- [x] **Step 2: Run to verify FAIL.**
 
-- [ ] **Step 3: Write the migration** `supabase/migrations/20260707100002_verification_status.sql`:
+- [x] **Step 3: Write the migration** `supabase/migrations/20260707100002_verification_status.sql`:
 
 ```sql
 -- Decouple verification state from node structure. Historically
@@ -346,9 +346,9 @@ $$;
 
 Note: the trigger `guard_nodes_write` already exists (migration `20260706000004`) and points at this function name — `CREATE OR REPLACE` is sufficient; do not recreate the trigger.
 
-- [ ] **Step 4: Run tests → pass; full suite.** If `tests/test_saas_schema.py` has existing assertions that `guard_node_write` blocks `node_type IN ('Signal', 'Trend')` on INSERT, update them to the new Trend-only + verification form.
+- [x] **Step 4: Run tests → pass; full suite.** If `tests/test_saas_schema.py` has existing assertions that `guard_node_write` blocks `node_type IN ('Signal', 'Trend')` on INSERT, update them to the new Trend-only + verification form.
 
-- [ ] **Step 5: Commit.** `git commit -m "feat(db): verification status column, retire node_type Shadow overload, lock verified content"`
+- [x] **Step 5: Commit.** `git commit -m "feat(db): verification status column, retire node_type Shadow overload, lock verified content"`
 
 ---
 
@@ -361,7 +361,7 @@ Note: the trigger `guard_nodes_write` already exists (migration `20260706000004`
 **Interfaces:**
 - Produces: edges PK `(source_node_id, target_node_id, relationship_type)` so a pair can be both `Cites` and `Contradicts`; HNSW cosine index `nodes_embedding_hnsw_idx` replacing the premature ivfflat index.
 
-- [ ] **Step 1: Write the failing test.** Append:
+- [x] **Step 1: Write the failing test.** Append:
 
 ```python
 EDGE_MULTIPLICITY = "20260707100003_edge_multiplicity_and_hnsw.sql"
@@ -383,9 +383,9 @@ class TestEdgeMultiplicityAndHnsw(unittest.TestCase):
 
 Add `EDGE_MULTIPLICITY` to `test_all_migration_files_present`.
 
-- [ ] **Step 2: Run to verify FAIL.**
+- [x] **Step 2: Run to verify FAIL.**
 
-- [ ] **Step 3: Write the migration** `supabase/migrations/20260707100003_edge_multiplicity_and_hnsw.sql`:
+- [x] **Step 3: Write the migration** `supabase/migrations/20260707100003_edge_multiplicity_and_hnsw.sql`:
 
 ```sql
 -- A node pair can hold multiple relationship types simultaneously
@@ -402,9 +402,9 @@ CREATE INDEX IF NOT EXISTS nodes_embedding_hnsw_idx
     ON nodes USING hnsw (embedding vector_cosine_ops);
 ```
 
-- [ ] **Step 4: Run tests → pass; full suite.**
+- [x] **Step 4: Run tests → pass; full suite.**
 
-- [ ] **Step 5: Commit.** `git commit -m "feat(db): edge relationship multiplicity and HNSW embedding index"`
+- [x] **Step 5: Commit.** `git commit -m "feat(db): edge relationship multiplicity and HNSW embedding index"`
 
 ---
 
@@ -417,7 +417,7 @@ CREATE INDEX IF NOT EXISTS nodes_embedding_hnsw_idx
 **Interfaces:**
 - Produces: `node_events` table (`id BIGINT IDENTITY PK, node_id UUID FK, event_type VARCHAR(50), actor UUID, payload JSONB, created_at TIMESTAMPTZ`) and trigger `log_node_events` capturing INSERT plus any change to scores/verification/polarity. Read-only for clients (no INSERT/UPDATE/DELETE policies; the SECURITY DEFINER trigger writes). The Scenario Builder's signal-momentum queries read this table.
 
-- [ ] **Step 1: Write the failing test.** Append:
+- [x] **Step 1: Write the failing test.** Append:
 
 ```python
 NODE_EVENTS = "20260707100004_node_events.sql"
@@ -445,9 +445,9 @@ class TestNodeEvents(unittest.TestCase):
 
 Add `NODE_EVENTS` to `test_all_migration_files_present`.
 
-- [ ] **Step 2: Run to verify FAIL.**
+- [x] **Step 2: Run to verify FAIL.**
 
-- [ ] **Step 3: Write the migration** `supabase/migrations/20260707100004_node_events.sql`:
+- [x] **Step 3: Write the migration** `supabase/migrations/20260707100004_node_events.sql`:
 
 ```sql
 -- Append-only history so signal evolution (strengthening, decay,
@@ -537,9 +537,9 @@ CREATE TRIGGER log_node_events
     FOR EACH ROW EXECUTE FUNCTION public.log_node_event();
 ```
 
-- [ ] **Step 4: Run tests → pass; full suite.**
+- [x] **Step 4: Run tests → pass; full suite.**
 
-- [ ] **Step 5: Commit.** `git commit -m "feat(db): append-only node_events history with change-logging trigger"`
+- [x] **Step 5: Commit.** `git commit -m "feat(db): append-only node_events history with change-logging trigger"`
 
 ---
 
@@ -556,7 +556,7 @@ CREATE TRIGGER log_node_events
   - `scenario_nodes(scenario_id, node_id, role, notes, created_by, created_at)` PK `(scenario_id, node_id, role)`
   - Enums: `scenario_quadrant ('High-High','High-Low','Low-High','Low-Low')`, `scenario_node_role ('Driver','Evidence','Wildcard','Shadow-Risk','Implication')`
 
-- [ ] **Step 1: Write the failing test.** Append:
+- [x] **Step 1: Write the failing test.** Append:
 
 ```python
 SCENARIO_SCAFFOLDING = "20260707100005_scenario_scaffolding.sql"
@@ -588,9 +588,9 @@ class TestScenarioScaffolding(unittest.TestCase):
 
 Add `SCENARIO_SCAFFOLDING` to `test_all_migration_files_present`.
 
-- [ ] **Step 2: Run to verify FAIL.**
+- [x] **Step 2: Run to verify FAIL.**
 
-- [ ] **Step 3: Write the migration** `supabase/migrations/20260707100005_scenario_scaffolding.sql`:
+- [x] **Step 3: Write the migration** `supabase/migrations/20260707100005_scenario_scaffolding.sql`:
 
 ```sql
 -- 2x2 scenario planning scaffolding: a scenario_set is one 2x2 matrix built
@@ -669,9 +669,9 @@ CREATE TRIGGER set_scenarios_updated_at
     FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 ```
 
-- [ ] **Step 4: Run tests → pass; full suite.**
+- [x] **Step 4: Run tests → pass; full suite.**
 
-- [ ] **Step 5: Commit.** `git commit -m "feat(db): scenario_sets, scenarios, and scenario_nodes scaffolding"`
+- [x] **Step 5: Commit.** `git commit -m "feat(db): scenario_sets, scenarios, and scenario_nodes scaffolding"`
 
 ---
 
@@ -684,7 +684,7 @@ CREATE TRIGGER set_scenarios_updated_at
 **Interfaces:**
 - Produces: RLS on all three scenario tables. Admin full access; students full CRUD on their own term's sets (and child scenarios/links); subscribers read published sets only.
 
-- [ ] **Step 1: Write the failing test.** Append:
+- [x] **Step 1: Write the failing test.** Append:
 
 ```python
 SCENARIO_RLS = "20260707100006_scenario_rls.sql"
@@ -714,9 +714,9 @@ class TestScenarioRls(unittest.TestCase):
 
 Add `SCENARIO_RLS` to `test_all_migration_files_present`.
 
-- [ ] **Step 2: Run to verify FAIL.**
+- [x] **Step 2: Run to verify FAIL.**
 
-- [ ] **Step 3: Write the migration** `supabase/migrations/20260707100006_scenario_rls.sql`:
+- [x] **Step 3: Write the migration** `supabase/migrations/20260707100006_scenario_rls.sql`:
 
 ```sql
 ALTER TABLE scenario_sets ENABLE ROW LEVEL SECURITY;
@@ -830,9 +830,9 @@ CREATE POLICY scenario_nodes_subscriber_read_published ON scenario_nodes
     );
 ```
 
-- [ ] **Step 4: Run tests → pass; full suite.**
+- [x] **Step 4: Run tests → pass; full suite.**
 
-- [ ] **Step 5: Commit.** `git commit -m "feat(db): RLS policies for scenario scaffolding tables"`
+- [x] **Step 5: Commit.** `git commit -m "feat(db): RLS policies for scenario scaffolding tables"`
 
 ---
 
@@ -850,7 +850,7 @@ CREATE POLICY scenario_nodes_subscriber_read_published ON scenario_nodes
   - `Database.map_signal_to_scenario(scenario_id, signal_id, role='Evidence', notes='')`, `Database.get_scenario_signals(scenario_id: str) -> List[dict]` (each row includes the joined signal columns plus `role` and `link_notes`).
   - `Database._migrate_schema()` adds missing columns to pre-existing DBs via `PRAGMA table_info(signals)` + `ALTER TABLE ADD COLUMN`.
 
-- [ ] **Step 1: Write the failing tests.** Append to `tests/test_database.py`:
+- [x] **Step 1: Write the failing tests.** Append to `tests/test_database.py`:
 
 ```python
 class TestScenarioTables(unittest.TestCase):
@@ -920,9 +920,9 @@ class TestScenarioTables(unittest.TestCase):
         self.assertEqual(rows[0]["title"], "Grid failures")
 ```
 
-- [ ] **Step 2: Run to verify FAIL.** `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -m unittest tests.test_database -v` → AttributeError / OperationalError.
+- [x] **Step 2: Run to verify FAIL.** `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -m unittest tests.test_database -v` → AttributeError / OperationalError.
 
-- [ ] **Step 3: Implement in `src/database.py`.**
+- [x] **Step 3: Implement in `src/database.py`.**
 
 3a. In `_init_schema`, extend the `signals` CREATE TABLE (after `source_metadata TEXT,`):
 
@@ -1088,9 +1088,9 @@ class TestScenarioTables(unittest.TestCase):
 
 Note: `add_scenario` deliberately uses plain `INSERT` (not `INSERT OR REPLACE`) so the `UNIQUE (scenario_set_id, quadrant)` constraint raises on duplicates — the test in Step 1 depends on this.
 
-- [ ] **Step 4: Run tests → pass; full suite.**
+- [x] **Step 4: Run tests → pass; full suite.**
 
-- [ ] **Step 5: Commit.** `git commit -m "feat(db): SQLite parity — shadow/uncertainty columns and scenario tables"`
+- [x] **Step 5: Commit.** `git commit -m "feat(db): SQLite parity — shadow/uncertainty columns and scenario tables"`
 
 ---
 
@@ -1103,7 +1103,7 @@ Note: `add_scenario` deliberately uses plain `INSERT` (not `INSERT OR REPLACE`) 
 **Interfaces:**
 - Produces: `assess_signal(...)` return dict gains keys `uncertainty_score` (int 1–10) and `horizon_year` (int or None). Both the Gemini path and the heuristic path must return them.
 
-- [ ] **Step 1: Write the failing test.** Append to `tests/test_assessment.py`:
+- [x] **Step 1: Write the failing test.** Append to `tests/test_assessment.py`:
 
 ```python
 class TestUncertaintyAssessment(unittest.TestCase):
@@ -1130,9 +1130,9 @@ class TestUncertaintyAssessment(unittest.TestCase):
         self.assertGreater(contested["uncertainty_score"], settled["uncertainty_score"])
 ```
 
-- [ ] **Step 2: Run to verify FAIL.**
+- [x] **Step 2: Run to verify FAIL.**
 
-- [ ] **Step 3: Implement.** In `_assess_with_heuristics`, after the impact block, add:
+- [x] **Step 3: Implement.** In `_assess_with_heuristics`, after the impact block, add:
 
 ```python
         # 2b. Evaluate Uncertainty Score (1-10)
@@ -1177,7 +1177,7 @@ and to the example JSON structure `"uncertainty_score": 7, "horizon_year": 2035`
         horizon_year = int(horizon_year) if horizon_year and 2020 <= int(horizon_year) <= 2200 else None
 ```
 
-- [ ] **Step 4: Run tests → pass; full suite.** Also update `src/cli.py` `ingest` to pass the two new assessment keys into `signal_record`:
+- [x] **Step 4: Run tests → pass; full suite.** Also update `src/cli.py` `ingest` to pass the two new assessment keys into `signal_record`:
 
 ```python
                 "uncertainty_score": assessment_results["uncertainty_score"],
@@ -1187,7 +1187,7 @@ and to the example JSON structure `"uncertainty_score": 7, "horizon_year": 2035`
                 "mitigation_notes": raw_sig.get("mitigation_notes"),
 ```
 
-- [ ] **Step 5: Commit.** `git commit -m "feat(assessment): uncertainty score and horizon-year estimation"`
+- [x] **Step 5: Commit.** `git commit -m "feat(assessment): uncertainty score and horizon-year estimation"`
 
 ---
 
@@ -1201,7 +1201,7 @@ and to the example JSON structure `"uncertainty_score": 7, "horizon_year": 2035`
 - Consumes: SQLite columns from Task 8; Supabase columns from Tasks 1–3.
 - Produces: `build_node_payload` emits `uncertainty_score`, `horizon_year`, `polarity`, `shadow_type`, `mitigation_notes`, and `verification` (derived: keeper + status 'Signal' → 'Verified', else 'Raw').
 
-- [ ] **Step 1: Write the failing test.** Append to `tests/test_migration_adapter.py` (follow the file's existing fixture pattern for constructing an adapter without a client):
+- [x] **Step 1: Write the failing test.** Append to `tests/test_migration_adapter.py` (follow the file's existing fixture pattern for constructing an adapter without a client):
 
 ```python
 class TestShadowAndUncertaintyMapping(unittest.TestCase):
@@ -1233,9 +1233,9 @@ class TestShadowAndUncertaintyMapping(unittest.TestCase):
         self.assertEqual(payload["polarity"], "Emergent")
 ```
 
-- [ ] **Step 2: Run to verify FAIL.**
+- [x] **Step 2: Run to verify FAIL.**
 
-- [ ] **Step 3: Implement.** In `build_node_payload`, add to the payload dict:
+- [x] **Step 3: Implement.** In `build_node_payload`, add to the payload dict:
 
 ```python
             "uncertainty_score": row.get("uncertainty_score"),
@@ -1255,9 +1255,9 @@ and add the helper next to `_resolve_node_type`:
         return "Raw"
 ```
 
-- [ ] **Step 4: Run tests → pass; full suite.**
+- [x] **Step 4: Run tests → pass; full suite.**
 
-- [ ] **Step 5: Commit.** `git commit -m "feat(migration): map uncertainty, shadow, and verification fields to Supabase payloads"`
+- [x] **Step 5: Commit.** `git commit -m "feat(migration): map uncertainty, shadow, and verification fields to Supabase payloads"`
 
 ---
 
@@ -1271,7 +1271,7 @@ and add the helper next to `_resolve_node_type`:
 - Consumes: `Database.update_signal_deduplication_status` (unchanged signature).
 - Produces: behavior change — singletons stay `Shadow` status (Raw) with their existing `source_metadata` untouched; keepers are elevated to `Signal` only when the cluster has ≥ 2 members; a duplicate's prior `source_metadata` is merged into the keeper's provenance rather than discarded.
 
-- [ ] **Step 1: Write the failing tests.** Append to `tests/test_deduplication.py`:
+- [x] **Step 1: Write the failing tests.** Append to `tests/test_deduplication.py`:
 
 ```python
 class TestNonDestructiveDedup(unittest.TestCase):
@@ -1312,9 +1312,9 @@ class TestNonDestructiveDedup(unittest.TestCase):
 
 Amend any existing test that asserts singletons become `Signal` (search for `status.*Signal` in `tests/test_deduplication.py`) to expect `Shadow`.
 
-- [ ] **Step 2: Run to verify FAIL.**
+- [x] **Step 2: Run to verify FAIL.**
 
-- [ ] **Step 3: Implement.** In `deduplicate_database`, replace the singleton branch (currently elevates to `Signal` and wipes metadata) with:
+- [x] **Step 3: Implement.** In `deduplicate_database`, replace the singleton branch (currently elevates to `Signal` and wipes metadata) with:
 
 ```python
             if len(cluster) == 1:
@@ -1370,9 +1370,9 @@ and in the duplicate-update loop keep each duplicate's own metadata:
 
 (SaaS note for future work, do not implement here: when this pipeline runs against Supabase it must be scoped `WHERE term_id = :term` so cohorts never cluster into each other.)
 
-- [ ] **Step 4: Run tests → pass; full suite** (dedup, pipeline e2e, cli tests may assert old singleton elevation — update expectations where they encode the old destructive behavior, keeping all other assertions).
+- [x] **Step 4: Run tests → pass; full suite** (dedup, pipeline e2e, cli tests may assert old singleton elevation — update expectations where they encode the old destructive behavior, keeping all other assertions).
 
-- [ ] **Step 5: Commit.** `git commit -m "fix(dedup): preserve provenance, stop auto-verifying uncorroborated singletons"`
+- [x] **Step 5: Commit.** `git commit -m "fix(dedup): preserve provenance, stop auto-verifying uncorroborated singletons"`
 
 ---
 

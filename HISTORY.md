@@ -373,3 +373,26 @@ Companion trackers:
 - **Lane C (API Validation & Schema Bridge):** Fugu can start connecting the Express 5 server under `artifacts/api-server/` to the hosted Supabase instance using a DB driver, replacing current flat-file JSON stores. Use `@workspace/api-zod` for request schemas.
 - **Lane D (Polar Radar UI Canvas):** Fugu can build the responsive React polar canvas inside `artifacts/foresight/` utilizing our brand colors, tactile margins, hover edgelines, and progressive disclosure drawers defined in `DESIGN.md`.
 - **Seed-Data Testing:** Fugu can run the SQLite signal migration client (`src/migration_adapter.py`) using our cleaned 129-row dataset inside `sources/25-fa-mm680-signals-and-trends-migration(Sheet1).csv` to populate the live Supabase tables!
+
+---
+
+## 2026-07-08 — Database Model Revision executed (feature/db-model-revision)
+
+**Owner:** Claude (Fable 5, subagent-driven development)
+
+**What was done:**
+- Executed all 11 tasks of `docs/superpowers/plans/2026-07-07-database-model-revision.md` with a fresh implementer subagent per task, per-task spec+quality review, and a final whole-branch review (Opus).
+- **Migrations 20260707100000–100007:** uncertainty_score / horizon_year / assessed_at / assessed_by on nodes; Shadow polarity affordances (signal_polarity + shadow_type enums, mitigation_notes, CHECK constraint, partial index); verification column (Raw/Verified/Archived) retiring the node_type='Shadow' overload and locking student edits of Verified nodes; edge PK widened to include relationship_type + HNSW index replacing ivfflat; append-only node_events history with SECURITY DEFINER logging trigger and read-only RLS; scenario_sets/scenarios/scenario_nodes scaffolding with full per-role RLS; authenticated table grants (live-stack fix).
+- **Security fixes found in review loops:** student scenario RLS split into 12 read/insert/update/delete policies after review caught that FOR ALL policies enforced ownership/is_published only in WITH CHECK (DELETE is governed solely by USING); dedup provenance merge made idempotent after review caught unbounded growth across repeated runs; migration adapter stopped emitting the retired node_type='Shadow', nulls shadow fields for Emergent rows, and documents the admin-auth requirement imposed by guard_node_write.
+- **Python parity:** SQLite signals gained the five new columns + _migrate_schema for existing DBs; scenario tables + CRUD added to Database; AssessmentEngine scores uncertainty and estimates horizon_year (Gemini + heuristic paths); CLI ingest passes polarity/shadow fields; deduplication no longer auto-verifies uncorroborated singletons and preserves provenance.
+- **Live verification (external session):** local Supabase stack installed, all migrations applied, role-isolated RLS behavior verified via tests/sql/live_rls_assertions.sql (M2.1b done).
+
+**Verification run:**
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -m unittest discover -s tests -p "test_*.py"` → **Ran 94 tests — OK** on feature/db-model-revision @ 0a15cd3.
+- Live RLS assertions applied against local Supabase (see tests/sql/).
+
+**Work remaining (tracked on KANBAN):**
+- M5.1 Scenario Builder implementation (plan P2 ready; depends on this branch).
+- M1.4 Migration adapter integrity: real embeddings (hash vectors still poison pgvector), idempotent upsert, keeper_id remapping, trends/edges migration.
+- M2.4 invite-code isolation; M2.6 student edge update/delete policies; M4.3 controlled vocabularies.
+- M1.5 auth web gateway — the single blocker for a human-user product test; M3.3 radar canvas; M4.1 public view API; M2.2/M2.3 admin boards.
