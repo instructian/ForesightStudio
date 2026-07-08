@@ -17,9 +17,23 @@ class Database:
         self.conn.execute("PRAGMA foreign_keys = ON;")
         self.conn.commit()
 
+    def _migrate_schema(self, cursor):
+        cursor.execute("PRAGMA table_info(signals)")
+        existing = {row[1] for row in cursor.fetchall()}
+        additions = {
+            "uncertainty_score": "INTEGER CHECK(uncertainty_score BETWEEN 1 AND 10)",
+            "horizon_year": "INTEGER CHECK(horizon_year BETWEEN 2020 AND 2200)",
+            "polarity": "TEXT CHECK(polarity IN ('Emergent', 'Shadow')) DEFAULT 'Emergent'",
+            "shadow_type": "TEXT CHECK(shadow_type IN ('Declining-System', 'Obsolete-Behavior', 'Worst-Case-Future', 'Disruption'))",
+            "mitigation_notes": "TEXT",
+        }
+        for column, ddl in additions.items():
+            if column not in existing:
+                cursor.execute(f"ALTER TABLE signals ADD COLUMN {column} {ddl}")
+
     def _init_schema(self):
         cursor = self.conn.cursor()
-        
+
         # 1. Signals/Shadows Table
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS signals (
@@ -44,6 +58,11 @@ class Database:
             is_keeper INTEGER DEFAULT 1,
             keeper_id TEXT,
             source_metadata TEXT,
+            uncertainty_score INTEGER CHECK(uncertainty_score BETWEEN 1 AND 10),
+            horizon_year INTEGER CHECK(horizon_year BETWEEN 2020 AND 2200),
+            polarity TEXT CHECK(polarity IN ('Emergent', 'Shadow')) DEFAULT 'Emergent',
+            shadow_type TEXT CHECK(shadow_type IN ('Declining-System', 'Obsolete-Behavior', 'Worst-Case-Future', 'Disruption')),
+            mitigation_notes TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(keeper_id) REFERENCES signals(id) ON DELETE SET NULL
         );
@@ -78,12 +97,55 @@ class Database:
         );
         """)
 
+        # 4. Scenario Sets Table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS scenario_sets (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            description TEXT,
+            axis_x_signal_id TEXT REFERENCES signals(id) ON DELETE SET NULL,
+            axis_y_signal_id TEXT REFERENCES signals(id) ON DELETE SET NULL,
+            axis_x_low_label TEXT,
+            axis_x_high_label TEXT,
+            axis_y_low_label TEXT,
+            axis_y_high_label TEXT,
+            horizon_year INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+
+        # 5. Scenarios Table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS scenarios (
+            id TEXT PRIMARY KEY,
+            scenario_set_id TEXT NOT NULL REFERENCES scenario_sets(id) ON DELETE CASCADE,
+            quadrant TEXT CHECK(quadrant IN ('High-High', 'High-Low', 'Low-High', 'Low-Low')) NOT NULL,
+            title TEXT NOT NULL,
+            narrative TEXT,
+            early_warning_indicators TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (scenario_set_id, quadrant)
+        );
+        """)
+
+        # 6. Scenario Signal Map Table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS scenario_signal_map (
+            scenario_id TEXT REFERENCES scenarios(id) ON DELETE CASCADE,
+            signal_id TEXT REFERENCES signals(id) ON DELETE CASCADE,
+            role TEXT CHECK(role IN ('Driver', 'Evidence', 'Wildcard', 'Shadow-Risk', 'Implication')) DEFAULT 'Evidence',
+            notes TEXT,
+            PRIMARY KEY (scenario_id, signal_id, role)
+        );
+        """)
+
+        self._migrate_schema(cursor)
         self.conn.commit()
 
     def add_signal(self, signal: Dict[str, Any]) -> str:
         cursor = self.conn.cursor()
         sig_id = signal.get("id") or f"sig_{os.urandom(4).hex()}"
-        
+
         # Format tags to comma-separated if list
         tags = signal.get("tags")
         if isinstance(tags, list):
@@ -100,8 +162,9 @@ class Database:
             id, title, description, category, source_url, source_type, date_observed,
             geography, sector, tags, confidence_score, novelty_score, impact_score,
             strategic_relevance, time_horizon, actionability, status, convergence_score,
-            is_keeper, keeper_id, source_metadata
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            is_keeper, keeper_id, source_metadata, uncertainty_score, horizon_year,
+            polarity, shadow_type, mitigation_notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             sig_id,
             signal["title"],
@@ -123,7 +186,12 @@ class Database:
             signal.get("convergence_score", 1.0),
             signal.get("is_keeper", 1),
             signal.get("keeper_id"),
-            meta_str
+            meta_str,
+            signal.get("uncertainty_score"),
+            signal.get("horizon_year"),
+            signal.get("polarity", "Emergent"),
+            signal.get("shadow_type"),
+            signal.get("mitigation_notes")
         ))
         self.conn.commit()
         return sig_id
@@ -220,6 +288,82 @@ class Database:
         rows = cursor.fetchall()
         res = []
         for r in rows:
+            d = dict(r)
+            d["source_metadata"] = json.loads(d["source_metadata"] or "[]")
+            res.append(d)
+        return res
+
+    def add_scenario_set(self, scenario_set: Dict[str, Any]) -> str:
+        cursor = self.conn.cursor()
+        set_id = scenario_set.get("id") or f"scnset_{os.urandom(4).hex()}"
+        cursor.execute("""
+        INSERT OR REPLACE INTO scenario_sets (
+            id, title, description, axis_x_signal_id, axis_y_signal_id,
+            axis_x_low_label, axis_x_high_label, axis_y_low_label, axis_y_high_label,
+            horizon_year
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            set_id,
+            scenario_set["title"],
+            scenario_set.get("description"),
+            scenario_set.get("axis_x_signal_id"),
+            scenario_set.get("axis_y_signal_id"),
+            scenario_set.get("axis_x_low_label"),
+            scenario_set.get("axis_x_high_label"),
+            scenario_set.get("axis_y_low_label"),
+            scenario_set.get("axis_y_high_label"),
+            scenario_set.get("horizon_year"),
+        ))
+        self.conn.commit()
+        return set_id
+
+    def get_scenario_set(self, set_id: str) -> Optional[Dict[str, Any]]:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM scenario_sets WHERE id = ?", (set_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def add_scenario(self, scenario: Dict[str, Any]) -> str:
+        cursor = self.conn.cursor()
+        scn_id = scenario.get("id") or f"scn_{os.urandom(4).hex()}"
+        cursor.execute("""
+        INSERT INTO scenarios (
+            id, scenario_set_id, quadrant, title, narrative, early_warning_indicators
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            scn_id,
+            scenario["scenario_set_id"],
+            scenario["quadrant"],
+            scenario["title"],
+            scenario.get("narrative"),
+            scenario.get("early_warning_indicators"),
+        ))
+        self.conn.commit()
+        return scn_id
+
+    def get_scenarios_for_set(self, set_id: str) -> List[Dict[str, Any]]:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM scenarios WHERE scenario_set_id = ? ORDER BY quadrant", (set_id,))
+        return [dict(r) for r in cursor.fetchall()]
+
+    def map_signal_to_scenario(self, scenario_id: str, signal_id: str, role: str = "Evidence", notes: str = ""):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+        INSERT OR REPLACE INTO scenario_signal_map (scenario_id, signal_id, role, notes)
+        VALUES (?, ?, ?, ?)
+        """, (scenario_id, signal_id, role, notes))
+        self.conn.commit()
+
+    def get_scenario_signals(self, scenario_id: str) -> List[Dict[str, Any]]:
+        cursor = self.conn.cursor()
+        cursor.execute("""
+        SELECT s.*, m.role, m.notes AS link_notes
+        FROM signals s
+        JOIN scenario_signal_map m ON s.id = m.signal_id
+        WHERE m.scenario_id = ?
+        """, (scenario_id,))
+        res = []
+        for r in cursor.fetchall():
             d = dict(r)
             d["source_metadata"] = json.loads(d["source_metadata"] or "[]")
             res.append(d)
