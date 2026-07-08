@@ -11,6 +11,7 @@ SEMANTIC = "20260706000003_semantic_recommender.sql"
 HARDENING = "20260706000004_rls_hardening.sql"
 PROVENANCE_EDGE_INTEGRITY = "20260706000005_provenance_and_edge_integrity.sql"
 ASSESSMENT_DIMENSIONS = "20260707100000_assessment_dimensions.sql"
+SHADOW_AFFORDANCES = "20260707100001_shadow_affordances.sql"
 
 
 def read_migration(filename):
@@ -23,7 +24,7 @@ class TestMigrationFilesExist(unittest.TestCase):
         self.assertTrue(os.path.isdir(MIGRATIONS_DIR))
 
     def test_all_migration_files_present(self):
-        for filename in (INIT_SCHEMA, AUTH_TRIGGERS, RLS_POLICIES, SEMANTIC, HARDENING, PROVENANCE_EDGE_INTEGRITY, ASSESSMENT_DIMENSIONS):
+        for filename in (INIT_SCHEMA, AUTH_TRIGGERS, RLS_POLICIES, SEMANTIC, HARDENING, PROVENANCE_EDGE_INTEGRITY, ASSESSMENT_DIMENSIONS, SHADOW_AFFORDANCES):
             path = os.path.join(MIGRATIONS_DIR, filename)
             self.assertTrue(os.path.isfile(path), f"Missing migration: {filename}")
             self.assertGreater(os.path.getsize(path), 0, f"Empty migration: {filename}")
@@ -187,6 +188,32 @@ class TestAssessmentDimensions(unittest.TestCase):
 
     def test_no_default_five(self):
         self.assertNotIn("uncertainty_score INTEGER DEFAULT", self.sql)
+
+
+class TestShadowAffordances(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.sql = read_migration(SHADOW_AFFORDANCES)
+
+    def test_polarity_enum(self):
+        self.assertIn("CREATE TYPE signal_polarity AS ENUM ('Emergent', 'Shadow')", self.sql)
+
+    def test_shadow_type_enum(self):
+        self.assertIn(
+            "CREATE TYPE shadow_type AS ENUM ('Declining-System', 'Obsolete-Behavior', 'Worst-Case-Future', 'Disruption')",
+            self.sql,
+        )
+
+    def test_polarity_column_not_null_default_emergent(self):
+        self.assertIn("ADD COLUMN IF NOT EXISTS polarity signal_polarity", self.sql)
+        self.assertIn("'Emergent'::signal_polarity NOT NULL", self.sql)
+
+    def test_shadow_fields_constraint(self):
+        self.assertIn("shadow_fields_require_shadow_polarity", self.sql)
+        self.assertIn("polarity = 'Shadow'", self.sql)
+
+    def test_shadow_partial_index(self):
+        self.assertIn("nodes_shadow_polarity_idx", self.sql)
 
 
 if __name__ == "__main__":
