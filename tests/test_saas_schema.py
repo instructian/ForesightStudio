@@ -12,6 +12,7 @@ HARDENING = "20260706000004_rls_hardening.sql"
 PROVENANCE_EDGE_INTEGRITY = "20260706000005_provenance_and_edge_integrity.sql"
 ASSESSMENT_DIMENSIONS = "20260707100000_assessment_dimensions.sql"
 SHADOW_AFFORDANCES = "20260707100001_shadow_affordances.sql"
+VERIFICATION_STATUS = "20260707100002_verification_status.sql"
 
 
 def read_migration(filename):
@@ -24,7 +25,7 @@ class TestMigrationFilesExist(unittest.TestCase):
         self.assertTrue(os.path.isdir(MIGRATIONS_DIR))
 
     def test_all_migration_files_present(self):
-        for filename in (INIT_SCHEMA, AUTH_TRIGGERS, RLS_POLICIES, SEMANTIC, HARDENING, PROVENANCE_EDGE_INTEGRITY, ASSESSMENT_DIMENSIONS, SHADOW_AFFORDANCES):
+        for filename in (INIT_SCHEMA, AUTH_TRIGGERS, RLS_POLICIES, SEMANTIC, HARDENING, PROVENANCE_EDGE_INTEGRITY, ASSESSMENT_DIMENSIONS, SHADOW_AFFORDANCES, VERIFICATION_STATUS):
             path = os.path.join(MIGRATIONS_DIR, filename)
             self.assertTrue(os.path.isfile(path), f"Missing migration: {filename}")
             self.assertGreater(os.path.getsize(path), 0, f"Empty migration: {filename}")
@@ -214,6 +215,34 @@ class TestShadowAffordances(unittest.TestCase):
 
     def test_shadow_partial_index(self):
         self.assertIn("nodes_shadow_polarity_idx", self.sql)
+
+
+class TestVerificationStatus(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.sql = read_migration(VERIFICATION_STATUS)
+
+    def test_verification_enum(self):
+        self.assertIn("CREATE TYPE verification_status AS ENUM ('Raw', 'Verified', 'Archived')", self.sql)
+
+    def test_backfill_from_node_type(self):
+        self.assertIn("UPDATE nodes SET verification", self.sql)
+        self.assertIn("node_type = 'Signal'", self.sql)
+
+    def test_retires_shadow_node_type(self):
+        self.assertIn("SET node_type = 'Signal'", self.sql)
+        self.assertIn("WHERE node_type = 'Shadow'", self.sql)
+
+    def test_policies_use_verification(self):
+        self.assertIn("nodes_subscriber_read_verified_signals", self.sql)
+        self.assertIn("verification = 'Verified'", self.sql)
+
+    def test_student_update_excludes_verified(self):
+        self.assertIn("nodes_student_update_own_term", self.sql)
+        self.assertIn("verification <> 'Verified'", self.sql)
+
+    def test_guard_protects_verification(self):
+        self.assertIn("NEW.verification IS DISTINCT FROM OLD.verification", self.sql)
 
 
 if __name__ == "__main__":
