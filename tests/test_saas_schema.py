@@ -10,6 +10,7 @@ RLS_POLICIES = "20260706000002_rls_policies.sql"
 SEMANTIC = "20260706000003_semantic_recommender.sql"
 HARDENING = "20260706000004_rls_hardening.sql"
 PROVENANCE_EDGE_INTEGRITY = "20260706000005_provenance_and_edge_integrity.sql"
+ASSESSMENT_DIMENSIONS = "20260707100000_assessment_dimensions.sql"
 
 
 def read_migration(filename):
@@ -22,7 +23,7 @@ class TestMigrationFilesExist(unittest.TestCase):
         self.assertTrue(os.path.isdir(MIGRATIONS_DIR))
 
     def test_all_migration_files_present(self):
-        for filename in (INIT_SCHEMA, AUTH_TRIGGERS, RLS_POLICIES, SEMANTIC, HARDENING, PROVENANCE_EDGE_INTEGRITY):
+        for filename in (INIT_SCHEMA, AUTH_TRIGGERS, RLS_POLICIES, SEMANTIC, HARDENING, PROVENANCE_EDGE_INTEGRITY, ASSESSMENT_DIMENSIONS):
             path = os.path.join(MIGRATIONS_DIR, filename)
             self.assertTrue(os.path.isfile(path), f"Missing migration: {filename}")
             self.assertGreater(os.path.getsize(path), 0, f"Empty migration: {filename}")
@@ -165,6 +166,27 @@ class TestProvenanceAndEdgeIntegrity(unittest.TestCase):
         self.assertIn("guard_edge_term_consistency", self.sql)
         self.assertIn("source_term IS DISTINCT FROM target_term", self.sql)
         self.assertIn("BEFORE INSERT OR UPDATE ON edges", self.sql)
+
+
+class TestAssessmentDimensions(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.sql = read_migration(ASSESSMENT_DIMENSIONS)
+
+    def test_uncertainty_score_column(self):
+        self.assertIn("ADD COLUMN IF NOT EXISTS uncertainty_score INTEGER", self.sql)
+        self.assertIn("uncertainty_score BETWEEN 1 AND 10", self.sql)
+
+    def test_horizon_year_column(self):
+        self.assertIn("ADD COLUMN IF NOT EXISTS horizon_year INTEGER", self.sql)
+        self.assertIn("horizon_year BETWEEN 2020 AND 2200", self.sql)
+
+    def test_assessment_provenance_columns(self):
+        self.assertIn("ADD COLUMN IF NOT EXISTS assessed_at TIMESTAMP WITH TIME ZONE", self.sql)
+        self.assertIn("ADD COLUMN IF NOT EXISTS assessed_by VARCHAR(100)", self.sql)
+
+    def test_no_default_five(self):
+        self.assertNotIn("uncertainty_score INTEGER DEFAULT", self.sql)
 
 
 if __name__ == "__main__":
