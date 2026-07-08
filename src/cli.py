@@ -92,7 +92,12 @@ def ingest(json_path, db_path):
                 "time_horizon": assessment_results["time_horizon"],
                 "strategic_relevance": assessment_results["strategic_relevance"],
                 "actionability": assessment_results["actionability"],
-                
+                "uncertainty_score": assessment_results["uncertainty_score"],
+                "horizon_year": assessment_results["horizon_year"],
+                "polarity": raw_sig.get("polarity", "Emergent"),
+                "shadow_type": raw_sig.get("shadow_type"),
+                "mitigation_notes": raw_sig.get("mitigation_notes"),
+
                 # Defaults for deduplication
                 "status": "Shadow", # Starts as a weak "Shadow" research point
                 "is_keeper": 1,

@@ -47,13 +47,17 @@ class AssessmentEngine:
         2. Strategic Relevance (A concise explanation of how this signal relates to broader societal shifts or strategic foresight)
         3. Time Horizon (Select exactly one of 'Near-term', 'Mid-term', or 'Long-term')
         4. Actionability (A concrete recommendation or next-step response an organization or speculative design studio could take based on this signal)
+        5. Uncertainty (An integer 1-10: how contested/unknowable the signal's trajectory is; 10 = deeply uncertain)
+        6. Horizon Year (Your best single-year estimate, e.g. 2035, for when this signal reaches mainstream impact)
 
         Return your analysis ONLY as a valid JSON object matching the following structure:
         {{
             "impact_score": 8,
             "strategic_relevance": "Explanation here...",
             "time_horizon": "Near-term",
-            "actionability": "Concrete next steps..."
+            "actionability": "Concrete next steps...",
+            "uncertainty_score": 7,
+            "horizon_year": 2035
         }}
         """
         model_name = "gemini-2.0-flash"
@@ -73,12 +77,18 @@ class AssessmentEngine:
         horizon = data.get("time_horizon", "Mid-term")
         if horizon not in ["Near-term", "Mid-term", "Long-term"]:
             horizon = "Mid-term"
-            
+
+        uncertainty_score = max(1, min(10, int(data.get("uncertainty_score", 5))))
+        horizon_year = data.get("horizon_year")
+        horizon_year = int(horizon_year) if horizon_year and 2020 <= int(horizon_year) <= 2200 else None
+
         return {
             "impact_score": impact_score,
             "strategic_relevance": data.get("strategic_relevance", "N/A"),
             "time_horizon": horizon,
-            "actionability": data.get("actionability", "N/A")
+            "actionability": data.get("actionability", "N/A"),
+            "uncertainty_score": uncertainty_score,
+            "horizon_year": horizon_year
         }
 
     def _assess_with_heuristics(self, title: str, description: str, category: str) -> Dict[str, Any]:
@@ -103,6 +113,23 @@ class AssessmentEngine:
             impact = 8
         elif any(w in text_to_scan for w in low_impact_keywords):
             impact = 3
+
+        # 2b. Evaluate Uncertainty Score (1-10)
+        high_uncertainty_keywords = ["might", "possibly", "speculative", "unproven", "contested", "unclear", "debate", "experimental", "rumor"]
+        low_uncertainty_keywords = ["confirmed", "documented", "measured", "established", "regulation passed", "longitudinal", "official"]
+
+        uncertainty = 5
+        if any(w in text_to_scan for w in high_uncertainty_keywords):
+            uncertainty = 8
+        elif any(w in text_to_scan for w in low_uncertainty_keywords):
+            uncertainty = 3
+
+        # 2c. Estimate horizon year: explicit 4-digit year wins, else map horizon band
+        year_match = re.search(r"\b(20[2-9][0-9]|21[0-9][0-9])\b", text_to_scan)
+        if year_match:
+            horizon_year = int(year_match.group(1))
+        else:
+            horizon_year = {"Near-term": 2028, "Mid-term": 2035, "Long-term": 2050}[horizon]
 
         # 3. Formulate Strategic Relevance Description
         relevance_phrases = []
@@ -133,5 +160,7 @@ class AssessmentEngine:
             "impact_score": impact,
             "strategic_relevance": strategic_relevance,
             "time_horizon": horizon,
-            "actionability": actionability
+            "actionability": actionability,
+            "uncertainty_score": uncertainty,
+            "horizon_year": horizon_year,
         }

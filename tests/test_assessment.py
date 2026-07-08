@@ -62,5 +62,28 @@ class TestAssessmentEngine(unittest.TestCase):
         self.assertEqual(result["strategic_relevance"], "Important strategic link.")
         self.assertEqual(result["actionability"], "Examine variables.")
 
+class TestUncertaintyAssessment(unittest.TestCase):
+    def setUp(self):
+        self.engine = AssessmentEngine(api_key=None)  # forces heuristic path
+
+    def test_heuristic_returns_uncertainty_and_horizon_year(self):
+        result = self.engine.assess_signal(
+            title="Speculative fusion breakthrough could transform energy by 2050",
+            description="Unproven, contested experimental results.",
+            category="Technological",
+        )
+        self.assertIn("uncertainty_score", result)
+        self.assertTrue(1 <= result["uncertainty_score"] <= 10)
+        self.assertIn("horizon_year", result)
+
+    def test_contested_language_raises_uncertainty(self):
+        contested = self.engine.assess_signal(
+            title="Unproven speculative claim", description="might possibly happen, contested",
+            category="Social")
+        settled = self.engine.assess_signal(
+            title="Documented measured adoption", description="confirmed by longitudinal data",
+            category="Social")
+        self.assertGreater(contested["uncertainty_score"], settled["uncertainty_score"])
+
 if __name__ == '__main__':
     unittest.main()
