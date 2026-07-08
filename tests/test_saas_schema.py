@@ -321,8 +321,43 @@ class TestScenarioRls(unittest.TestCase):
             self.assertIn(policy, self.sql)
 
     def test_student_term_scoped(self):
-        self.assertIn("scenario_sets_student_term", self.sql)
         self.assertIn("public.current_user_term_id()", self.sql)
+        for policy in (
+            "scenario_sets_student_read",
+            "scenario_sets_student_insert",
+            "scenario_sets_student_update",
+            "scenario_sets_student_delete",
+            "scenarios_student_read",
+            "scenarios_student_insert",
+            "scenarios_student_update",
+            "scenarios_student_delete",
+            "scenario_nodes_student_read",
+            "scenario_nodes_student_insert",
+            "scenario_nodes_student_update",
+            "scenario_nodes_student_delete",
+        ):
+            self.assertIn(f"CREATE POLICY {policy} ", self.sql)
+
+    def test_legacy_student_term_policies_only_dropped(self):
+        for policy in (
+            "scenario_sets_student_term",
+            "scenarios_student_term",
+            "scenario_nodes_student_term",
+        ):
+            self.assertIn(f"DROP POLICY IF EXISTS {policy}", self.sql)
+            self.assertNotIn(f"CREATE POLICY {policy} ", self.sql)
+
+    def test_student_delete_requires_unpublished_ownership(self):
+        for policy, table in (
+            ("scenario_sets_student_delete", "scenario_sets"),
+            ("scenarios_student_delete", "scenarios"),
+            ("scenario_nodes_student_delete", "scenario_nodes"),
+        ):
+            start = self.sql.index(f"CREATE POLICY {policy} ON {table}")
+            end = self.sql.index(";", start)
+            clause = self.sql[start:end]
+            self.assertIn("FOR DELETE", clause)
+            self.assertIn("is_published = false", clause)
 
     def test_subscriber_published_only(self):
         self.assertIn("scenario_sets_subscriber_read_published", self.sql)
