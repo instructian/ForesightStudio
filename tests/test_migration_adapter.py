@@ -126,7 +126,7 @@ class TestMigrationAdapter(unittest.TestCase):
 
         payload = adapter.build_node_payload(row)
 
-        self.assertEqual(payload["node_type"], "Shadow")
+        self.assertEqual(payload["node_type"], "Signal")
         self.assertIs(payload["is_keeper"], False)
 
     def test_migrate_signals_uses_injected_supabase_client(self):
@@ -138,7 +138,7 @@ class TestMigrationAdapter(unittest.TestCase):
         self.assertEqual(migrated, 2)
         self.assertEqual(len(supabase.tables["nodes"].payloads), 2)
         self.assertEqual(supabase.tables["nodes"].payloads[0]["node_type"], "Signal")
-        self.assertEqual(supabase.tables["nodes"].payloads[1]["node_type"], "Shadow")
+        self.assertEqual(supabase.tables["nodes"].payloads[1]["node_type"], "Signal")
 
 
 class TestShadowAndUncertaintyMapping(unittest.TestCase):
@@ -168,6 +168,19 @@ class TestShadowAndUncertaintyMapping(unittest.TestCase):
         payload = self.adapter.build_node_payload(row)
         self.assertEqual(payload["verification"], "Raw")
         self.assertEqual(payload["polarity"], "Emergent")
+
+    def test_non_shadow_polarity_nulls_shadow_fields(self):
+        row = {
+            "id": "sig_3", "title": "t", "description": "d",
+            "category": "Social", "time_horizon": "Near-term",
+            "is_keeper": 1, "status": "Signal",
+            "polarity": "Emergent", "shadow_type": "Disruption",
+            "mitigation_notes": "x",
+        }
+        payload = self.adapter.build_node_payload(row)
+        self.assertEqual(payload["polarity"], "Emergent")
+        self.assertIsNone(payload["shadow_type"])
+        self.assertIsNone(payload["mitigation_notes"])
 
 
 if __name__ == "__main__":

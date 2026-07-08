@@ -30,6 +30,16 @@ class MigrationAdapter:
     The Supabase ``nodes`` schema has no dedicated provenance column, so the
     deduplication ``source_metadata`` is only serialized into the payload when
     ``node_metadata_field`` names a column the target schema actually supports.
+
+    Auth requirement: migration 20260707100002 installs a ``guard_node_write``
+    trigger that rejects non-admin INSERTs where ``verification <> 'Raw'``.
+    ``is_administrator()`` is evaluated against ``auth.uid()``, so a bare
+    Supabase service-role key does NOT satisfy it -- service_role bypasses RLS
+    policies, but this trigger still fires and checks the authenticated
+    identity, not the key's role. Run this adapter's ``migrate_signals()``
+    authenticated as an approved Administrator profile, or disable/relax the
+    guard trigger for the duration of the migration window; otherwise every
+    keeper row (which carries ``verification='Verified'``) will be rejected.
     """
 
     def __init__(
@@ -84,9 +94,16 @@ class MigrationAdapter:
         return [tag.strip() for tag in str(raw_tags).split(",") if tag.strip()]
 
     def _resolve_node_type(self, row: Dict[str, Any]) -> str:
-        if int(row.get("is_keeper", 1) or 0) == 1:
-            return "Signal"
-        return "Shadow"
+        """Return the node_type for a migrated row.
+
+        node_type='Shadow' was retired by migration 20260707100002 and must
+        never be written again; the ``verification`` column (Raw/Verified)
+        now carries the distinction previously implied by is_keeper. Every
+        migrated row is therefore a Signal node. This method is kept as the
+        single call site for node_type so future schema changes have one
+        place to update.
+        """
+        return "Signal"
 
     def _resolve_verification(self, row: Dict[str, Any]) -> str:
         if int(row.get("is_keeper", 1) or 0) == 1 and row.get("status") == "Signal":
@@ -106,6 +123,16 @@ class MigrationAdapter:
 
     def build_node_payload(self, row: Dict[str, Any]) -> Dict[str, Any]:
         text = f"{row.get('title', '')} {row.get('description', '')}".strip()
+        polarity = row.get("polarity") or "Emergent"
+        # Postgres CHECK shadow_fields_require_shadow_polarity requires
+        # shadow_type/mitigation_notes to be NULL unless polarity='Shadow'.
+        # SQLite has no equivalent constraint, so enforce parity here.
+        if polarity == "Shadow":
+            shadow_type = row.get("shadow_type")
+            mitigation_notes = row.get("mitigation_notes")
+        else:
+            shadow_type = None
+            mitigation_notes = None
         payload = {
             "title": row.get("title"),
             "description": row.get("description"),
@@ -126,9 +153,9 @@ class MigrationAdapter:
             "actionability": row.get("actionability"),
             "uncertainty_score": row.get("uncertainty_score"),
             "horizon_year": row.get("horizon_year"),
-            "polarity": row.get("polarity") or "Emergent",
-            "shadow_type": row.get("shadow_type"),
-            "mitigation_notes": row.get("mitigation_notes"),
+            "polarity": polarity,
+            "shadow_type": shadow_type,
+            "mitigation_notes": mitigation_notes,
             "verification": self._resolve_verification(row),
             "is_keeper": int(row.get("is_keeper", 1) or 0) == 1,
             "embedding": self.generate_embedding(text),
