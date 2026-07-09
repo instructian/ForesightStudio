@@ -396,3 +396,32 @@ Companion trackers:
 - M1.4 Migration adapter integrity: real embeddings (hash vectors still poison pgvector), idempotent upsert, keeper_id remapping, trends/edges migration.
 - M2.4 invite-code isolation; M2.6 student edge update/delete policies; M4.3 controlled vocabularies.
 - M1.5 auth web gateway — the single blocker for a human-user product test; M3.3 radar canvas; M4.1 public view API; M2.2/M2.3 admin boards.
+
+---
+
+## 2026-07-09 — Frontend v1 design phase complete; pilot execution staged for handoff
+
+**Owner:** Claude (Fable 5)
+
+**What was done:**
+- **PRODUCT.md** written (impeccable init): product register, users (students / instructors / subscribers), "Rigorous · Collaborative · Calm" personality, anti-references, five design principles, WCAG 2.2 AA bar.
+- **Design spec** `docs/superpowers/specs/2026-07-08-frontend-v1-design.md` (impeccable shape, user-confirmed): app shell + 7 surfaces (auth/approval, signal entry, browser+detail, shadow risk lens, admin roster/terms/audit/analytics).
+- **Key model decision (user-directed):** verification is *student-generated, admin-audited*. Peer-only validation — a structured 4-item checklist + confidence score by a classmate (validator ≠ author, DB-enforced) is the ONLY student path to `verification='Verified'`. Admin surface is an Audit view (spot-check, correct, demote with a class-visible `instructor_note`).
+- **Pilot implementation plan** `docs/superpowers/plans/2026-07-08-frontend-pilot.md` (7 TDD tasks): peer-validation migration (full SQL in plan), supabase-js + vitest foundations, session/role routing, auth + awaiting-approval UI, app shell, Signal Entry form, live E2E sign-off.
+
+**Current state at handoff:**
+- Branch `feature/frontend-pilot` created off main @ 84f2b57 — **no commits yet; Task 1 not started.**
+- Local Supabase stack RUNNING: API http://127.0.0.1:54321, DB postgresql://postgres:postgres@127.0.0.1:54322/postgres (anon key via `supabase status`). All 15 migrations applied; live RLS assertions in `tests/sql/live_rls_assertions.sql` pass.
+- Test suites green: Python 94/94 (`PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 -m unittest discover -s tests -p "test_*.py"`).
+- Progress ledger: `.superpowers/sdd/progress.md` (DB revision fully logged; pilot section opened, empty).
+
+**How to resume (next session):**
+1. `git checkout feature/frontend-pilot`; confirm `supabase status` shows the stack up (else `supabase start`).
+2. Execute `docs/superpowers/plans/2026-07-08-frontend-pilot.md` with superpowers:subagent-driven-development. **User directive: use cheap (haiku) subagents wherever the plan text carries complete code** (Tasks 1–2); standard tier for prose-spec/UI tasks (3–6, impeccable craft bar with in-browser inspection); reviewers mid-tier.
+3. Task 2 needs `supabase gen types typescript --local` and `pnpm install` at repo root; frontend env goes in `artifacts/foresight/.env.local` (gitignored) per plan.
+4. Log each task in the ledger; final whole-branch review before merge (see DB-revision entries as the template).
+
+**Work remaining after pilot (each gets its own plan):**
+- Phase 2: signal browser + detail + validation UI, shadow risk lens (spec §5.3–5.4).
+- Phase 3: admin roster/terms/audit/analytics (spec §5.5–5.8).
+- Then: Scenario Builder (docs/superpowers/plans/2026-07-07-scenario-builder-tool.md, unexecuted); KANBAN M1.4 remainder, M2.4, M2.6, M4.3, M1.6; production re-evaluation of Supabase-direct before any deploy.
