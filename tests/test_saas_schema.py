@@ -18,6 +18,7 @@ NODE_EVENTS = "20260707100004_node_events.sql"
 SCENARIO_SCAFFOLDING = "20260707100005_scenario_scaffolding.sql"
 SCENARIO_RLS = "20260707100006_scenario_rls.sql"
 AUTHENTICATED_GRANTS = "20260707100007_authenticated_table_grants.sql"
+PEER_VALIDATION = "20260708000000_peer_validation.sql"
 
 
 def read_migration(filename):
@@ -30,7 +31,7 @@ class TestMigrationFilesExist(unittest.TestCase):
         self.assertTrue(os.path.isdir(MIGRATIONS_DIR))
 
     def test_all_migration_files_present(self):
-        for filename in (INIT_SCHEMA, AUTH_TRIGGERS, RLS_POLICIES, SEMANTIC, HARDENING, PROVENANCE_EDGE_INTEGRITY, ASSESSMENT_DIMENSIONS, SHADOW_AFFORDANCES, VERIFICATION_STATUS, EDGE_MULTIPLICITY, NODE_EVENTS, SCENARIO_SCAFFOLDING, SCENARIO_RLS, AUTHENTICATED_GRANTS):
+        for filename in (INIT_SCHEMA, AUTH_TRIGGERS, RLS_POLICIES, SEMANTIC, HARDENING, PROVENANCE_EDGE_INTEGRITY, ASSESSMENT_DIMENSIONS, SHADOW_AFFORDANCES, VERIFICATION_STATUS, EDGE_MULTIPLICITY, NODE_EVENTS, SCENARIO_SCAFFOLDING, SCENARIO_RLS, AUTHENTICATED_GRANTS, PEER_VALIDATION):
             path = os.path.join(MIGRATIONS_DIR, filename)
             self.assertTrue(os.path.isfile(path), f"Missing migration: {filename}")
             self.assertGreater(os.path.getsize(path), 0, f"Empty migration: {filename}")
@@ -379,6 +380,35 @@ class TestAuthenticatedGrants(unittest.TestCase):
 
     def test_recommender_execute_granted(self):
         self.assertIn("GRANT EXECUTE ON FUNCTION surface_related_nodes", self.sql)
+
+
+class TestPeerValidation(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.sql = read_migration(PEER_VALIDATION)
+
+    def test_validations_table(self):
+        self.assertIn("CREATE TABLE IF NOT EXISTS validations", self.sql)
+        self.assertIn("PRIMARY KEY (node_id, validator)", self.sql)
+        self.assertIn("confidence BETWEEN 1 AND 10", self.sql)
+
+    def test_peer_only_insert_policy(self):
+        self.assertIn("validations_student_insert_peer", self.sql)
+        self.assertIn("created_by <> auth.uid()", self.sql)
+        self.assertIn("verification = 'Raw'", self.sql)
+
+    def test_trigger_flips_verification(self):
+        self.assertIn("FUNCTION public.apply_validation()", self.sql)
+        self.assertIn("SECURITY DEFINER", self.sql)
+        self.assertIn("SET verification = 'Verified'", self.sql)
+
+    def test_instructor_note_guarded(self):
+        self.assertIn("ADD COLUMN IF NOT EXISTS instructor_note TEXT", self.sql)
+        self.assertIn("NEW.instructor_note IS DISTINCT FROM OLD.instructor_note", self.sql)
+
+    def test_checklist_keys_required(self):
+        for key in ("source_checked", "not_duplicate", "signal_logic", "classification_justified"):
+            self.assertIn(key, self.sql)
 
 
 if __name__ == "__main__":

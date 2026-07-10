@@ -121,6 +121,38 @@ SELECT public.test_expect_denied(
 SET LOCAL request.jwt.claim.sub = '00000000-0000-0000-0000-000000000005';
 SELECT public.test_assert((SELECT count(*) FROM nodes) = 0, 'unapproved student cannot read nodes');
 
+-- Peer validation assertions - create test data as postgres first
+SET LOCAL ROLE postgres;
+ALTER TABLE nodes DISABLE TRIGGER guard_nodes_write;
+INSERT INTO nodes (id, title, description, category, time_horizon, node_type, verification, is_keeper, created_by, term_id, embedding)
+VALUES ('20000000-0000-0000-0000-000000000006', 'Peer test node', 'For peer validation testing', 'Social', 'Near-term', 'Signal', 'Raw', false, '00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', array_fill(0.05::real, ARRAY[384])::vector);
+ALTER TABLE nodes ENABLE TRIGGER guard_nodes_write;
+
+SET LOCAL ROLE authenticated;
+SET LOCAL request.jwt.claim.sub = '00000000-0000-0000-0000-000000000002';
+SELECT public.test_expect_denied(
+    $$INSERT INTO validations (node_id, validator, checklist, confidence) VALUES ('20000000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-000000000002', '{"source_checked": true, "not_duplicate": true, "signal_logic": true, "classification_justified": true}'::jsonb, 8)$$,
+    'student cannot validate own node'
+);
+
+INSERT INTO validations (node_id, validator, checklist, confidence) VALUES ('20000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000002', '{"source_checked": true, "not_duplicate": true, "signal_logic": true, "classification_justified": true}'::jsonb, 8);
+SELECT public.test_assert((SELECT verification FROM nodes WHERE id='20000000-0000-0000-0000-000000000006') = 'Verified', 'student validation triggers node verification');
+
+SELECT public.test_expect_denied(
+    $$UPDATE nodes SET verification='Verified' WHERE id='20000000-0000-0000-0000-000000000005'$$,
+    'student direct verification update still rejected'
+);
+
+SELECT public.test_expect_denied(
+    $$INSERT INTO validations (node_id, validator, checklist, confidence) VALUES ('20000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000002', '{"source_checked": true, "not_duplicate": true, "signal_logic": true, "classification_justified": true}'::jsonb, 9)$$,
+    'second validation for verified node rejected by policy'
+);
+
+SELECT public.test_expect_denied(
+    $$UPDATE nodes SET instructor_note='test note' WHERE id='20000000-0000-0000-0000-000000000005'$$,
+    'student cannot write instructor_note'
+);
+
 ROLLBACK;
 
 \echo 'M2.1b live RLS assertions passed'
