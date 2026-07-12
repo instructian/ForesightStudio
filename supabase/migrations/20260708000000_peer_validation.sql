@@ -62,11 +62,9 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-    PERFORM set_config('foresight.apply_validation_trigger', 'true', false);
     UPDATE public.nodes
     SET verification = 'Verified'
     WHERE id = NEW.node_id AND verification = 'Raw';
-    PERFORM set_config('foresight.apply_validation_trigger', 'false', false);
     RETURN NEW;
 END;
 $$;
@@ -94,22 +92,26 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    -- Allow apply_validation trigger to bypass the guard for the specific case
-    -- of promoting verification from 'Raw' to 'Verified' with no other changes.
-    IF current_setting('foresight.apply_validation_trigger', true) = 'true' THEN
-        IF NEW.verification = 'Verified'::verification_status
-           AND OLD.verification = 'Raw'::verification_status
-           AND NEW.node_type IS NOT DISTINCT FROM OLD.node_type
-           AND NEW.is_keeper IS NOT DISTINCT FROM OLD.is_keeper
-           AND NEW.convergence_score IS NOT DISTINCT FROM OLD.convergence_score
-           AND NEW.keeper_id IS NOT DISTINCT FROM OLD.keeper_id
-           AND NEW.created_by IS NOT DISTINCT FROM OLD.created_by
-           AND NEW.term_id IS NOT DISTINCT FROM OLD.term_id
-           AND NEW.assessed_at IS NOT DISTINCT FROM OLD.assessed_at
-           AND NEW.assessed_by IS NOT DISTINCT FROM OLD.assessed_by
-           AND NEW.instructor_note IS NOT DISTINCT FROM OLD.instructor_note THEN
-            RETURN NEW;
-        END IF;
+    -- Allow the Raw -> Verified flip performed by the apply_validation
+    -- trigger (nested trigger context: user statement depth is 1, a
+    -- trigger-initiated UPDATE runs the guard at depth > 1). The allowance
+    -- is narrow: ONLY the verification transition Raw -> Verified with every
+    -- other guarded field unchanged.
+    IF TG_OP = 'UPDATE'
+       AND pg_trigger_depth() > 1
+       AND OLD.verification = 'Raw'::verification_status
+       AND NEW.verification = 'Verified'::verification_status
+       AND NEW.node_type IS NOT DISTINCT FROM OLD.node_type
+       AND NEW.is_keeper IS NOT DISTINCT FROM OLD.is_keeper
+       AND NEW.convergence_score IS NOT DISTINCT FROM OLD.convergence_score
+       AND NEW.keeper_id IS NOT DISTINCT FROM OLD.keeper_id
+       AND NEW.created_by IS NOT DISTINCT FROM OLD.created_by
+       AND NEW.term_id IS NOT DISTINCT FROM OLD.term_id
+       AND NEW.assessed_at IS NOT DISTINCT FROM OLD.assessed_at
+       AND NEW.assessed_by IS NOT DISTINCT FROM OLD.assessed_by
+       AND NEW.instructor_note IS NOT DISTINCT FROM OLD.instructor_note
+    THEN
+        RETURN NEW;
     END IF;
 
     IF TG_OP = 'INSERT' THEN

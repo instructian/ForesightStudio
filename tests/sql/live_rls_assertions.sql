@@ -39,7 +39,8 @@ VALUES
     ('00000000-0000-0000-0000-000000000002', 'student-a@example.test', '', now(), now(), now(), '{}'::jsonb),
     ('00000000-0000-0000-0000-000000000003', 'student-b@example.test', '', now(), now(), now(), '{}'::jsonb),
     ('00000000-0000-0000-0000-000000000004', 'subscriber@example.test', '', now(), now(), now(), '{}'::jsonb),
-    ('00000000-0000-0000-0000-000000000005', 'unapproved@example.test', '', now(), now(), now(), '{}'::jsonb)
+    ('00000000-0000-0000-0000-000000000005', 'unapproved@example.test', '', now(), now(), now(), '{}'::jsonb),
+    ('00000000-0000-0000-0000-000000000006', 'student-c@example.test', '', now(), now(), now(), '{}'::jsonb)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO terms (id, name, invite_code, is_active)
@@ -60,6 +61,8 @@ UPDATE profiles SET full_name='Subscriber', role='Subscriber', is_approved=true,
 WHERE id='00000000-0000-0000-0000-000000000004';
 UPDATE profiles SET full_name='Unapproved', role='Student', is_approved=false, term_id='10000000-0000-0000-0000-000000000001'
 WHERE id='00000000-0000-0000-0000-000000000005';
+UPDATE profiles SET full_name='Student C', role='Student', is_approved=true, term_id='10000000-0000-0000-0000-000000000001'
+WHERE id='00000000-0000-0000-0000-000000000006';
 
 ALTER TABLE profiles ENABLE TRIGGER guard_profiles_update;
 ALTER TABLE nodes DISABLE TRIGGER guard_nodes_write;
@@ -143,14 +146,30 @@ SELECT public.test_expect_denied(
     'student direct verification update still rejected'
 );
 
+-- Different validator (student-c, term A) so this isolates the
+-- validations_student_insert_peer policy's `nodes.verification = 'Raw'`
+-- re-check, rather than tripping the (node_id, validator) primary key.
+SET LOCAL request.jwt.claim.sub = '00000000-0000-0000-0000-000000000006';
 SELECT public.test_expect_denied(
-    $$INSERT INTO validations (node_id, validator, checklist, confidence) VALUES ('20000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000002', '{"source_checked": true, "not_duplicate": true, "signal_logic": true, "classification_justified": true}'::jsonb, 9)$$,
-    'second validation for verified node rejected by policy'
+    $$INSERT INTO validations (node_id, validator, checklist, confidence) VALUES ('20000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000006', '{"source_checked": true, "not_duplicate": true, "signal_logic": true, "classification_justified": true}'::jsonb, 9)$$,
+    'second validation for an already-Verified node rejected'
 );
 
+SET LOCAL request.jwt.claim.sub = '00000000-0000-0000-0000-000000000002';
 SELECT public.test_expect_denied(
     $$UPDATE nodes SET instructor_note='test note' WHERE id='20000000-0000-0000-0000-000000000005'$$,
     'student cannot write instructor_note'
+);
+
+-- Regression: the old (unforgeable-in-appearance but actually session-local)
+-- GUC bridge must no longer grant anything. A plain student session sets it
+-- and then attempts the same direct verification write the guard is meant
+-- to block; it must still be rejected because guard_node_write no longer
+-- reads this setting at all (it now trusts only pg_trigger_depth()).
+SELECT set_config('foresight.apply_validation_trigger', 'true', false);
+SELECT public.test_expect_denied(
+    $$UPDATE nodes SET verification='Verified' WHERE id='20000000-0000-0000-0000-000000000005'$$,
+    'GUC-based bypass of verification guard rejected (pg_trigger_depth regression test)'
 );
 
 ROLLBACK;

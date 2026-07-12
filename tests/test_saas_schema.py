@@ -410,6 +410,11 @@ class TestPeerValidation(unittest.TestCase):
         for key in ("source_checked", "not_duplicate", "signal_logic", "classification_justified"):
             self.assertIn(key, self.sql)
 
+    def test_guard_bypass_uses_trigger_depth_not_guc(self):
+        self.assertIn("pg_trigger_depth", self.sql)
+        self.assertNotIn("foresight.apply_validation_trigger", self.sql)
+        self.assertNotIn("set_config", self.sql)
+
 
 if __name__ == "__main__":
     unittest.main()
