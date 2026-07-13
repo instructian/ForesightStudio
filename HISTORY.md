@@ -425,3 +425,24 @@ Companion trackers:
 - Phase 2: signal browser + detail + validation UI, shadow risk lens (spec §5.3–5.4).
 - Phase 3: admin roster/terms/audit/analytics (spec §5.5–5.8).
 - Then: Scenario Builder (docs/superpowers/plans/2026-07-07-scenario-builder-tool.md, unexecuted); KANBAN M1.4 remainder, M2.4, M2.6, M4.3, M1.6; production re-evaluation of Supabase-direct before any deploy.
+
+---
+
+## 2026-07-13 — Frontend pilot: Tasks 1–3 of 7 complete; paused before Task 4 (auth UI)
+
+**Owner:** Claude (Fable 5, subagent-driven per plan `docs/superpowers/plans/2026-07-08-frontend-pilot.md`)
+
+**What was done (branch `feature/frontend-pilot`, f267fb8..8fc93e2):**
+- **Task 1 — Peer-validation database layer** (commits f8c791d + security fix 969add6): migration `20260708000000_peer_validation.sql` — `validations` table (PK node_id+validator, 4-key checklist JSONB, confidence 1–10), peer-only RLS insert policy (validator = caller, node is a classmate's Raw signal in-term), `apply_validation` SECURITY DEFINER trigger flipping Raw→Verified, `nodes.instructor_note` (admin-only writes). **Review caught a real hole:** first version bridged the guard trigger with an unprivileged session GUC any user could set to skip peer review; replaced with an unforgeable `pg_trigger_depth()`-gated allowance narrowed to exactly the Raw→Verified transition with all other guarded fields unchanged. Live RLS assertions extended (peer-only, cross-term, GUC-regression, isolated re-validation case) and pass against the local stack; Python suite 100/100.
+- **Task 2 — Frontend foundations** (1c4353c + workspace fix 2ab14b0): `@supabase/supabase-js` + vitest/testing-library in `artifacts/foresight`; generated `src/lib/database.types.ts` from the live schema; lazy typed client (`getSupabase()`, clear env error); `.env.example`; `.env.local` gitignored. **Controller env fix:** `pnpm-workspace.yaml` had darwin-arm64 native binaries excluded (Replit linux-only assumption) plus a literal `allowBuilds: esbuild: set this to true or false` placeholder — vitest/vite could not run on macOS at all. Re-enabled darwin-arm64 for esbuild/rollup/lightningcss/oxide, set allowBuilds.esbuild=true; supply-chain gates (minimumReleaseAge 1440) untouched.
+- **Task 3 — Session, roles, route guards** (8fc93e2): `SessionProvider`/`useSession()` with pure `deriveStatus()` (signedOut/loading/unapproved/student/admin; Subscriber treated as student for now), `refreshProfile()` for approval polling, `queries.ts` (useProfile/useMyTerm), App.tsx rewritten with the spec §5.0 route table and guard redirects; **17 mockup pages + app-layout deleted**; placeholder pages hold routes for Tasks 4–6. Frontend typecheck now fully green; 9/9 vitest.
+
+**Verification state:** Python 100/100; frontend vitest 9/9; typecheck green; live RLS assertions pass; dev server smoke-tested (200).
+
+**How to resume (Task 4 of 7 — auth UI):**
+1. `git checkout feature/frontend-pilot`; `supabase status` (start if down).
+2. Continue plan Task 4 per the dispatch spec preserved in the ledger context: build login/signup/waiting pages (design spec §5.1/§7, DESIGN.md tokens, shadcn controls), `src/lib/auth-errors.ts` error map with tests FIRST, **fold in the Task 3 review fix** (loadProfile request-sequence guard in session.tsx), in-browser verification against the live stack (signup → waiting → SQL-approve → auto-advance; screenshots 360/768/1280), commit "feat(web): auth and approval flow".
+3. Then Task 5 (app shell), Task 6 (Signal Entry form + zod schema/mapper tests — full code in the plan), Task 7 (live E2E sign-off).
+4. Ledger: `.superpowers/sdd/progress.md`. Reviews: per-task (sonnet) + final whole-branch before merge.
+
+**Deferred minors (for final whole-branch review):** vacuous dynamic-import test in supabase.test.ts (Task 2); loadProfile race fix folded into Task 4.
